@@ -21,8 +21,8 @@ Use digital pin to supply your 1-wire buses. Remember, 1 sensor consumes up to 1
 ## UDP
 Configure  local IP and remote port in the sketch. By default, UDP packets are send as multicast. Set the boardAddress to distinguish between multiple Arduinos.
 UDP syntax:
-* DS18B20 1wire sensor packet: ardu<boardAddress> 1w<OneWireBus> <sensorAddress> temp <tempCelsius> (example: ardu2 1w1 28ff641dcdc5dd41 temp 25.63)
-* DS2438 1wire sensor packet: ardu<boardAddress> 1w<OneWireBus> <sensorAddress> <tempCelsius> <Vad> <Vcurr> (example: ardu2 1w2 2612c3102004f 25.44 1.23 0.12)
-* Arduino (re)start: ardu<boardAddress> rst
-* Sensor detected (after start): ardu<boardAddress> 1w<OneWireBus> <sensorAddress> detected
-* Sensor error: ardu<boardAddress> 1w<OneWireBus> <sensorAddress> error
+* DS18B20 1wire sensor packet: `ardu<boardAddress> 1w<OneWireBus> <sensorAddress> temp <tempCelsius>` (example: ardu2 1w1 28ff641dcdc5dd41 temp 25.63)
+* DS2438 1wire sensor packet: `ardu<boardAddress> 1w<OneWireBus> <sensorAddress> <tempCelsius> <Vad> <Vcurr>` (example: ardu2 1w2 2612c3102004f 25.44 1.23 0.12)
+* Arduino (re)start: `ardu<boardAddress> rst`
+* Sensor detected (after start): `ardu<boardAddress> 1w<OneWireBus> <sensorAddress> detected`
+* Sensor error: `ardu<boardAddress> 1w<OneWireBus> <sensorAddress> error`
