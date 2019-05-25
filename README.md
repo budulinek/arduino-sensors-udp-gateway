@@ -1,5 +1,5 @@
 # OneWire-Multibus-UDP
-Arduino sketch to read DS18B20 and DS2438 sensors on multiple 1-wire buses. Fast, non-blocking. Data are send via UDP packets.
+Arduino sketch to read DS18B20 and DS2438 sensors on multiple 1-wire buses. Fast, non-blocking. Data are send via UDP packets. Based on https://github.com/PavSedl/RAILDUINO-2.0 
 
 ## Sensors
 Reads DS18B20 sensors (temperature) and DS2438 sensors (temp, Vad, Vcurr). DS2438 not tested yet. Limit is set to 10 sensors per bus.
