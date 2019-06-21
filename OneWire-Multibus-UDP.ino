@@ -58,11 +58,9 @@ EthernetUDP udpSend;
 
 #define numOfOneWireBuses 5
 int oneWireBusPins[numOfOneWireBuses] = {2, 3, 4, 5, 6};             // 1-wire buses. Digital pins can be used.
-int ethResetPin = {7};                                               // Ethernet shield reset pin (optional - deal with power on reset issue of the ethernet shield)
 int oneWirePowerPin = {8};                                          // Power (Vcc) to 1-wire buses (optional). Connect Vcc directly to pin or use transistor switch.
 
 byte boardAddress = 2;
-byte ethOn = 0;
 
 
 String boardAddressStr;
@@ -125,18 +123,6 @@ void setup() {
     digitalWrite(oneWirePowerPin, LOW);
     startMillis = millis();
     while (millis() - startMillis < 500);
-  }
-
-  if (ethResetPin) {
-    pinMode(ethResetPin, OUTPUT);
-    digitalWrite(ethResetPin, LOW);
-    delay(25);
-    digitalWrite(ethResetPin, HIGH);
-    startMillis = millis();
-    while (millis() - startMillis < 500);
-    pinMode(ethResetPin, INPUT);
-    startMillis = millis();
-    while (millis() - startMillis < 3000);
   }
 
   mac[5] = (0xED + boardAddress);
