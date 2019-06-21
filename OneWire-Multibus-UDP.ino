@@ -39,8 +39,9 @@
 
 
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0};
-unsigned int remPort = 55555;
-IPAddress ip(192, 168, 1, 80);                                       // IP address of your Arduino
+unsigned int sendPort = 10000;                                    // sending port
+unsigned int remPort = 10009;                                     // remote port
+IPAddress ip(192, 168, 1, 81);                                       // IP address of your Arduino
 // IPAddress gateway(192, 168, 1, 80);
 // IPAddress subnet(255, 255, 255, 0);
 IPAddress sendIpAddress(255, 255, 255, 255);
@@ -53,10 +54,11 @@ char outputPacketBuffer[outputPacketBufferSize];
 EthernetUDP udpSend;
 
 #define oneWireCycle 30000                                            // 1-wire scan cycle
-#define oneWireDepowerCycle 25000                                     // Depower period after reading 1-wire (optional). Must be shorter than oneWireCycle.
+#define oneWireDepowerCycle 29000                                     // Depower period after reading 1-wire (optional). Must be shorter than oneWireCycle.
 
 #define numOfOneWireBuses 5
 int oneWireBusPins[numOfOneWireBuses] = {2, 3, 4, 5, 6};             // 1-wire buses. Digital pins can be used.
+int ethResetPin = {7};                                               // Ethernet shield reset pin (optional - deal with power on reset issue of the ethernet shield)
 int oneWirePowerPin = {8};                                          // Power (Vcc) to 1-wire buses (optional). Connect Vcc directly to pin or use transistor switch.
 
 byte boardAddress = 2;
@@ -71,6 +73,8 @@ String detectedStr = "detected";
 String errorStr = "error";
 String rstStr = "rst";
 String tempStr = "temp";
+
+unsigned long startMillis;
 
 class Timer {
   private:
@@ -113,18 +117,32 @@ void setup() {
   boardAddressStr = String(boardAddress);
   boardAddressRailStr = railStr + String(boardAddress);
 
-  if (Ethernet.hardwareStatus() != EthernetNoHardware) {
-    mac[5] = (0xED + boardAddress);
-    Ethernet.begin(mac, ip);
-  }
-
   if (oneWirePowerPin) {
     pinMode(oneWirePowerPin, OUTPUT);
-    digitalWrite(oneWirePowerPin, LOW);
-    delay(500);
     digitalWrite(oneWirePowerPin, HIGH);
-    delay(500);
+    startMillis = millis();
+    while (millis() - startMillis < 500);
+    digitalWrite(oneWirePowerPin, LOW);
+    startMillis = millis();
+    while (millis() - startMillis < 500);
   }
+
+  if (ethResetPin) {
+    pinMode(ethResetPin, OUTPUT);
+    digitalWrite(ethResetPin, LOW);
+    delay(25);
+    digitalWrite(ethResetPin, HIGH);
+    startMillis = millis();
+    while (millis() - startMillis < 500);
+    pinMode(ethResetPin, INPUT);
+    startMillis = millis();
+    while (millis() - startMillis < 3000);
+  }
+
+  mac[5] = (0xED + boardAddress);
+  Ethernet.begin(mac, ip);
+
+  udpSend.begin(sendPort);
 
   for (int i = 0; i < numOfOneWireBuses; i++) {
     oneWireBus[i] = new OneWire(oneWireBusPins[i]);
@@ -260,7 +278,10 @@ void processOnewire() {
       break;
     case 4:
       if (oneWirePowerPin) {
-        digitalWrite(oneWirePowerPin, LOW);
+        digitalWrite(oneWirePowerPin, HIGH);        // Power off
+        for (int i = 0; i < numOfOneWireBuses; i++) {
+          oneWireBus[i]->depower();
+        }
         oneWireState++;
       } else {
         oneWireState = 0;
@@ -270,7 +291,7 @@ void processOnewire() {
       if (!oneWireDepowerTimer.isOver()) {
         return;
       }
-      digitalWrite(oneWirePowerPin, HIGH);
+      digitalWrite(oneWirePowerPin, LOW);
       oneWireState = 0;
       break;
   }
