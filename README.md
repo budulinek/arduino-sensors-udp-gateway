@@ -16,7 +16,7 @@ DS18B20 sensors are read in async mode. Command requestTemperatures() does not w
 
 ## Depower between readings (optional)
 Depower 1-wire buses between readings to improve reliability and save some power. In my case, switching the power off/on improved reliability - sensors with error are reconnected.
-Use digital pin to supply your 1-wire buses. Remember, 1 sensor consumes up to 1,5 mA, Arduino has a limit 40 mA per pin. In order to bypass the current limit, you can try transistor-switch such as this one:
+Use digital pin to supply your 1-wire buses. Remember, 1 sensor consumes up to 1,5 mA, Arduino has a limit 40 mA per pin. In order to bypass the current limit, you can try transistor-switch (see the circuit.png).
 
 
 
