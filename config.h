@@ -12,10 +12,10 @@
 unsigned int listenPort = 10032;                       // local listening port
 unsigned int sendPort = 10000;                         // local sending port
 unsigned int remPort = 10032;                          // remote port
-IPAddress ip(10, 10, 10, 32);                          // local IP address
-IPAddress gateway(10, 10, 10, 1);
+IPAddress ip(192, 168, 1, 32);                          // local IP address
+IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
-IPAddress sendIpAddress(10, 10, 10, 10);               // remote IP
+IPAddress sendIpAddress(192, 168, 1, 10);               // remote IP, you can also use 255, 255, 255, 255 for broadcast (faster)
 #define ETH_RESET_PIN 7                                // OPTIONAL: Ethernet shield reset pin (deals with power on reset issue of the ethernet shield)
 byte boardIdentifier = 2;                       // number identifying the board in UDP output
 
