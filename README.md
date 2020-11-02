@@ -6,6 +6,7 @@ Reads any combination of these sensor types:
 * Onewire Dallas temperature sensors
 * DHT temperature and humidity sensors
 * BH1750FVI light sensors
+
 For detailed list of sensors see config. You can put multiple onewire sensors on a single bus. You can have multiple onewire buses, DHT sensors or light sensors. All you need is to specidy pins in the config file. For more details on connections, see config file.
 
 ## Fast, non-blocking
