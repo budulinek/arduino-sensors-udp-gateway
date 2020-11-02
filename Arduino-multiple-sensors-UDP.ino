@@ -167,12 +167,6 @@ void setup() {
   sendMsg(rstStr);
 
 #ifdef USE_ONEWIRE
-
-  //      just for me... TODO delete
-#define ONEWIRE_POWER_PIN 6
-  pinMode(ONEWIRE_POWER_PIN, OUTPUT);
-  digitalWrite(ONEWIRE_POWER_PIN, LOW);
-
   for (byte i = 0; i < sizeof(oneWireBusPins); i++) {
     oneWireBus[i] = new OneWire(oneWireBusPins[i]);
     oneWireBus2438[i] = new DS2438(oneWireBus[i]);
