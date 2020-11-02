@@ -10,21 +10,6 @@
     GNU General Public License for more details.
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-
-/*
-
-   signals from Arduino:
-
-     Arduino (re)start:              ardu1 rst
-   commands to Arduino:
-     read DHT sensor:                ardu1 dht2
-     read all DHT sensors:           ardu1 dht
-     restart:                        ardu1 rst
-   default scan cycles:
-     DHT sensors cycle (if change):  5000 ms
-     1wire cycle:                    30000 ms
 
 */
 
