@@ -20,11 +20,12 @@
 #include "config.h"
 #ifdef USE_ONEWIRE
 #include <OneWire.h>                // Onewire https://www.pjrc.com/teensy/td_libs_OneWire.html
+#define REQUIRESALARMS false
 #include <DallasTemperature.h>      // DallasTemperature https://github.com/milesburton/Arduino-Temperature-Control-Library
 #include <DS2438.h>                 // https://github.com/budulinek/arduino-onewire-DS2438
 #endif /* USE_ONEWIRE */
 #ifdef USE_DHT
-#include <DHT.h>                    // DHT sensor library https://github.com/adafruit/DHT-sensor-library 
+#include <dhtnew.h>                    // DHTNEW https://github.com/RobTillaart/DHTNEW
 #endif /* USE_DHT */
 #ifdef USE_LIGHT
 #include <BH1750FVI.h>              // BH1750FVI_RT https://github.com/RobTillaart/BH1750FVI_RT
@@ -85,49 +86,48 @@ EthernetUDP udpSend;
 #endif /* DEBUG */
 
 #ifdef USE_ONEWIRE
-OneWire *oneWireBus[sizeof(oneWireBusPins)];
-DS2438 *oneWireBus2438[sizeof(oneWireBusPins)];
-DallasTemperature *oneWireBusDallas[sizeof(oneWireBusPins)];
-bool oneWireBusDallasFinished[sizeof(oneWireBusPins)];
+OneWire *oneWire[sizeof(oneWirePins)];
+DS2438 *ds2438[sizeof(oneWirePins)];
+DallasTemperature *dallas[sizeof(oneWirePins)];
 // store oneWire sensors
 typedef struct {
-  byte bus;
+  byte bus;                // bus to which the sensor is attached
   byte addr[8];
   float oldTemp;
-  byte errorCnt;
+  byte retryCnt;           // number of attempts to read
+  byte state;              // state of the reading process for individual sensor
+  byte errorCnt;           // number of errors
 } oneWireSensor;
 oneWireSensor oneWireSensors[ONEWIRE_MAX_SENSORS];
-byte DS18B20count[sizeof(oneWireBusPins)] = {};
+int oneWireRequest = SCHEDULED;                 // request command from UDP (TODO)
 Timer oneWireTimer;
-byte oneWireState = 0;
-int oneWireRequest = SCHEDULED;
 #endif /* USE_ONEWIRE */
 
 #ifdef USE_DHT
-DHT *dhtSensor[sizeof(dhtSensorPins)];
+DHTNEW *dht[sizeof(dhtPins)];
 // store DHT sensor values
 typedef struct {
   float oldTemp;
   float oldHumid;
-  byte state;
-} dhtSensr;
-dhtSensr dhtSensors[sizeof(dhtSensorPins)];
+  byte retryCnt;           // number of attempts to read
+  byte state;              // state of the reading process for individual sensor
+} dhtSensor;
+dhtSensor dhtSensors[sizeof(dhtPins)];
 Timer dhtTimer;
-byte dhtState = 0;
 int dhtRequest = SCHEDULED;
-bool dhtError = false;
 #endif /* USE_DHT */
 
 #ifdef USE_LIGHT
-BH1750FVI *lightSensor[sizeof(lightSensorPins)];
+BH1750FVI *bh1750[sizeof(lightPins)];
+byte lightDecPlaces = 1;
 // store lightWire sensors
 typedef struct {
   float oldLux;
-  byte state;
-} lightSensr;
-lightSensr lightSensors[sizeof(lightSensorPins)];
+  byte retryCnt;           // number of attempts to read
+  byte state;              // state of the reading process for individual sensor
+} lightSensor;
+lightSensor lightSensors[sizeof(lightPins)];
 Timer lightTimer;
-byte lightState = 0;
 int lightRequest = SCHEDULED;
 #endif /* USE_LIGHT */
 
@@ -167,41 +167,47 @@ void setup() {
   sendMsg(rstStr);
 
 #ifdef USE_ONEWIRE
-  for (byte i = 0; i < sizeof(oneWireBusPins); i++) {
-    oneWireBus[i] = new OneWire(oneWireBusPins[i]);
-    oneWireBus2438[i] = new DS2438(oneWireBus[i]);
-    oneWireBusDallas[i] = new DallasTemperature(oneWireBus[i]);
-    oneWireBusDallas[i]->begin();
-    oneWireBusDallas[i]->setWaitForConversion(false);
-    DS18B20count[i] = 0;
+  for (byte i = 0; i < sizeof(oneWirePins); i++) {
+    oneWire[i] = new OneWire(oneWirePins[i]);
+    ds2438[i] = new DS2438(oneWire[i]);
+    dallas[i] = new DallasTemperature(oneWire[i]);
+    dallas[i]->begin();
+    dallas[i]->setWaitForConversion(false);
+    dallas[i]->setCheckForConversion(true);
   }
   searchOnewire();
 #endif /* USE_ONEWIRE */
 
 #ifdef USE_DHT
-#ifdef DHT_POWER_PIN
-  pinMode(DHT_POWER_PIN, OUTPUT);
-  digitalWrite(DHT_POWER_PIN, HIGH);
-#endif /* DHT_POWER_PIN */
-  for (byte i = 0; i < sizeof(dhtSensorPins); i++) {
-    dhtSensor[i] = new DHT(dhtSensorPins[i], DHT_TYPE);
-    dhtSensor[i]->begin();
+  for (byte i = 0; i < sizeof(dhtPins); i++) {
+    dht[i] = new DHTNEW(dhtPins[i]);
+    dht[i]->getType();
   }
 #endif /* USE_DHT */
 
 #ifdef USE_LIGHT
   Wire.begin();
-  Wire.setWireTimeout(25000, false);    // I2C timeout 25ms to prevent lockups (latest Wire.h needed for this function)
-  for (byte i = 0; i < sizeof(lightSensorPins); i++) {
-    lightSensor[i] = new BH1750FVI(0x5C);   // 0x5C means that sensor will be read if address pin is set to HIGH
-    lightSensor[i]->powerOn();
-    lightSensor[i]->setContHigh2Res();
-    pinMode(lightSensorPins[i], OUTPUT);
-    digitalWrite(lightSensorPins[i], LOW);
+  Wire.setWireTimeout(25000, false);    // I2C timeout 25ms to prevent lockups, no need to do HW reset. Latest Wire.h needed for this function.
+  // Unlike DHT sensors (which have separate DATA pins), all light sensors share the same data line (I2C bus).
+  // Unlike onewire sensors, light sensors are not individually addressable, they can only be addressed by setting the address pin LOW or HIGH.
+  // Therefore, before communicating via I2C, we have to make sure that only one sensor has address pin set to HIGH.
+  for (byte i = 0; i < sizeof(lightPins); i++) {
+    pinMode(lightPins[i], OUTPUT);
+    digitalWrite(lightPins[i], LOW);
+  }
+  for (byte i = 0; i < sizeof(lightPins); i++) {
+    digitalWrite(lightPins[i], HIGH);
+    delay(20);                         // just a precaution
+    bh1750[i] = new BH1750FVI(BH1750FVI_ALT_ADDRESS);        // means that bh1750 commands will be processed by a sensor with address pin set to HIGH
+    bh1750[i]->powerOn();
+    if (lightResolution == 0.5) bh1750[i]->setContHigh2Res();
+    else if (lightResolution == 4) bh1750[i]->setContLowRes();
+    else bh1750[i]->setContHighRes();
+    digitalWrite(lightPins[i], LOW);
     lightSensors[i].oldLux = -1;
   }
+  if (lightResolution == 0.5) lightDecPlaces = 1;
 #endif /* USE_LIGHT */
-
 }
 
 void loop() {
@@ -229,12 +235,13 @@ String oneWireAddressToString(byte addr[]) {
 
 void searchOnewire() {
 #ifdef USE_ONEWIRE
-  for (byte i = 0; i < sizeof(oneWireBusPins); i++) {
+  for (byte i = 0; i < sizeof(oneWirePins); i++) {
     byte newAddr[8];
-    while (oneWireBus[i]->search(newAddr)) {
+    oneWire[i]->reset_search();
+    while (oneWire[i]->search(newAddr)) {
       if (OneWire::crc8(newAddr, 7) == newAddr[7]) {
         // check if sensor type is supported by libraries we use
-        if (oneWireBusDallas[i]->validFamily(newAddr) || (newAddr[0] == 38)) {
+        if (dallas[i]->validFamily(newAddr) || (newAddr[0] == 38)) {
           bool old = false;
           // Check if sensor address is already stored in memory
           for (byte s = 0; s < ONEWIRE_MAX_SENSORS; s++) {
@@ -251,7 +258,6 @@ void searchOnewire() {
                 for (byte x = 0; x < 8; x++) {
                   oneWireSensors[t].addr[x] = newAddr[x];
                 }
-                if (oneWireSensors[t].addr[0] != 38) DS18B20count[i]++;
                 oneWireSensors[t].bus = i;
                 String sendStr;
                 sendStr += oneWireStr;
@@ -277,8 +283,7 @@ void searchOnewire() {
         }
       }
     }
-    oneWireBus[i]->reset_search();
-    oneWireBusDallas[i]->setResolution(ONEWIRE_RESOLUTION);
+    dallas[i]->setResolution(ONEWIRE_RESOLUTION);
   }
 #endif /* USE_ONEWIRE */
 }
@@ -288,110 +293,123 @@ void readOnewire() {
   if (!oneWireTimer.isOver()) {
     return;
   }
-  switch (oneWireState) {
-    case 0:     // Check for new sensors
-      searchOnewire();
-      oneWireState++;
-      break;
-    case 1:     // Read DS2438
-      // TODO check if reading DS2438 is blocking or not
-      for (byte j = 0; j < sizeof(oneWireBusPins); j++) {
-        for (byte i = 0; i < ONEWIRE_MAX_SENSORS; i++) {
-          if (oneWireSensors[i].addr[0] == 38 && oneWireSensors[i].bus == j) {
-            oneWireBus2438[j]->begin();
-            oneWireBus2438[j]->update(oneWireSensors[i].addr);
-            String sendStr;
-            sendStr += oneWireStr;
-            sendStr += String(j + 1, DEC);
+  for (byte i = 0; i < ONEWIRE_MAX_SENSORS; i++) {
+    if (oneWireSensors[i].state == FINISHED) continue;     // This sensor is finished, continue the for loop with the next one (probably not needed here).
+    switch (oneWireSensors[i].state) {
+      case 0:          // Initialize conversion for all dallas temp sensors on a bus
+        if (dallas[oneWireSensors[i].bus]->validFamily(oneWireSensors[i].addr)) {
+          dallas[oneWireSensors[i].bus]->requestTemperatures();
+          // all dallas temp sensors on the same bus can go to next state
+          for (byte j = 0; j < ONEWIRE_MAX_SENSORS; j++) {
+            if ((dallas[oneWireSensors[j].bus]->validFamily(oneWireSensors[j].addr)) && (oneWireSensors[j].bus == oneWireSensors[i].bus)) {
+              oneWireSensors[j].state++;
+            }
+          }
+        } else if (oneWireSensors[i].addr[0] == 38) {
+          oneWireSensors[i].state++;
+        }
+        break;
+      case 1:          // Read sensors
+        // read dallas temp sensors in case conversion is completed
+        if (dallas[oneWireSensors[i].bus]->validFamily(oneWireSensors[i].addr) && dallas[oneWireSensors[i].bus]->isConversionComplete()) {
+          float tempC = dallas[oneWireSensors[i].bus]->getTempC(oneWireSensors[i].addr);
+          String sendStr;
+          sendStr += oneWireStr;
+          sendStr += String(oneWireSensors[i].bus + 1, DEC);
+          sendStr += " ";
+          sendStr += oneWireAddressToString(oneWireSensors[i].addr);
+          sendStr += " ";
+          if ((tempC != -127) && (tempC != 85)) {
+            oneWireSensors[i].errorCnt = 0;
+            oneWireSensors[i].retryCnt = 0;
+            if (ONEWIRE_HYSTERESIS && (abs(tempC - oneWireSensors[i].oldTemp) <= ONEWIRE_HYSTERESIS)) {
+              oneWireSensors[i].state++;
+              break;                  // break the switch-case, in order to avoid sendMsg(sendStr)
+            }
+            oneWireSensors[i].oldTemp = tempC;
+            sendStr += tempStr;
             sendStr += " ";
-            sendStr += oneWireAddressToString(oneWireSensors[i].addr);
-            sendStr += " ";
-            if (!oneWireBus2438[j]->isError()) {
-              float temp = oneWireBus2438[j]->getTemperature();
-              if (ONEWIRE_HYSTERESIS && (abs(temp - oneWireSensors[i].oldTemp) <= ONEWIRE_HYSTERESIS)) continue;
-              sendStr += String(temp, 2);
-              sendStr += " ";
-              sendStr += String(oneWireBus2438[j]->getVoltage(DS2438_CHA), 2);
-              sendStr += " ";
-              sendStr += String(oneWireBus2438[j]->getVoltage(DS2438_CHB), 2);
-              oneWireSensors[i].errorCnt = 0;
-            } else if (oneWireSensors[i].errorCnt == ONEWIRE_MAX_ERRORS) {
-              sendStr += dropStr;
-              sendMsg(sendStr);
+            sendStr += String(tempC, 2);
+          } else if (oneWireSensors[i].retryCnt == ONEWIRE_MAX_RETRY) {   // error detected, ONEWIRE_MAX_RETRY treshold reached
+            sendStr += errorStr;
+            oneWireSensors[i].retryCnt = 0;
+            oneWireSensors[i].errorCnt++;
+            if (oneWireSensors[i].errorCnt == ONEWIRE_MAX_ERRORS) { // error detected, ONEWIRE_MAX_ERRORS treshold reached
+              // delete sensor
               for (byte x = 0; x < 8; x++) {
                 oneWireSensors[i].addr[x] = 0;
               }
               oneWireSensors[i].errorCnt = 0;
               oneWireSensors[i].bus = 0;
-            } else {
-              sendStr += errorStr;
-              oneWireSensors[i].errorCnt++;
+              sendStr += dropStr;
             }
-            sendMsg(sendStr);
+          } else {                             // TODO be more aggressive in case of error (new requestTemperatures or even depower and reset?)
+            oneWireSensors[i].retryCnt++;
+            dallas[oneWireSensors[i].bus]->requestTemperaturesByAddress(oneWireSensors[i].addr);
+            break;
           }
-        }
-      }
-      oneWireState++;
-      break;
-    case 2:     // sends command for all devices on all buses to perform a temperature conversion
-      for (byte j = 0; j < sizeof(oneWireBusPins); j++) {
-        oneWireBusDallas[j]->requestTemperatures();
-        oneWireBusDallasFinished[j] = false;
-      }
-      oneWireState++;
-      break;
-    case 3:     // Read DS18B20
-      for (byte j = 0; j < sizeof(oneWireBusPins); j++) {
-        if (((oneWireBusDallasFinished[j] == false) && oneWireBusDallas[j]->isConversionComplete()) || !DS18B20count[j]) {
-          oneWireBusDallasFinished[j] = true;
-          // Conversion is complete, we can fetch temperature for all sensors on the bus
-          for (byte i = 0; i < ONEWIRE_MAX_SENSORS; i++) {
-            if (oneWireSensors[i].addr[0] != 0 && oneWireSensors[i].addr[0] != 38 && oneWireSensors[i].bus == j) {
-              float tempC = oneWireBusDallas[j]->getTempC(oneWireSensors[i].addr);
-              String sendStr;
-              sendStr += oneWireStr;
-              sendStr += String(j + 1, DEC);
-              sendStr += " ";
-              sendStr += oneWireAddressToString(oneWireSensors[i].addr);
-              sendStr += " ";
-              if ((tempC != -127) && (tempC != 85)) {
-                oneWireSensors[i].errorCnt = 0;
-                if (ONEWIRE_HYSTERESIS && (abs(tempC - oneWireSensors[i].oldTemp) <= ONEWIRE_HYSTERESIS)) continue;
-                sendStr += tempStr;
-                sendStr += " ";
-                sendStr += String(tempC, 2);
-                oneWireSensors[i].oldTemp = tempC;
-              } else if (oneWireSensors[i].errorCnt == ONEWIRE_MAX_ERRORS) {
-                sendStr += dropStr;
-                for (byte x = 0; x < 8; x++) {
-                  oneWireSensors[i].addr[x] = 0;
-                }
-                oneWireSensors[i].errorCnt = 0;
-                oneWireSensors[i].bus = 0;
-                DS18B20count[j]--;
-              } else {
-                sendStr += errorStr;
-                oneWireSensors[i].errorCnt++;
+          sendMsg(sendStr);
+          oneWireSensors[i].state = FINISHED;
+        } else if (oneWireSensors[i].addr[0] == 38) {       // read DS2438
+          ds2438[oneWireSensors[i].bus]->begin();
+          ds2438[oneWireSensors[i].bus]->update(oneWireSensors[i].addr);
+          String sendStr;
+          sendStr += oneWireStr;
+          sendStr += String(oneWireSensors[i].bus + 1, DEC);
+          sendStr += " ";
+          sendStr += oneWireAddressToString(oneWireSensors[i].addr);
+          sendStr += " ";
+          if (!ds2438[oneWireSensors[i].bus]->isError()) {
+            oneWireSensors[i].errorCnt = 0;
+            oneWireSensors[i].retryCnt = 0;
+            float temp = ds2438[oneWireSensors[i].bus]->getTemperature();
+            if (ONEWIRE_HYSTERESIS && (abs(temp - oneWireSensors[i].oldTemp) <= ONEWIRE_HYSTERESIS)) {
+              oneWireSensors[i].state++;
+              break;                  // break the switch-case, in order to avoid sendMsg(sendStr)
+            }
+            sendStr += String(temp, 2);
+            sendStr += " ";
+            sendStr += String(ds2438[oneWireSensors[i].bus]->getVoltage(DS2438_CHA), 2);
+            sendStr += " ";
+            sendStr += String(ds2438[oneWireSensors[i].bus]->getVoltage(DS2438_CHB), 2);
+            oneWireSensors[i].oldTemp = temp;
+          } else if (oneWireSensors[i].retryCnt == ONEWIRE_MAX_RETRY) {   // error detected, ONEWIRE_MAX_RETRY treshold reached
+            sendStr += errorStr;
+            oneWireSensors[i].retryCnt = 0;
+            oneWireSensors[i].errorCnt++;
+            if (oneWireSensors[i].errorCnt == ONEWIRE_MAX_ERRORS) { // error detected, ONEWIRE_MAX_ERRORS treshold reached
+              // delete sensor
+              for (byte x = 0; x < 8; x++) {
+                oneWireSensors[i].addr[x] = 0;
               }
-              sendMsg(sendStr);
+              oneWireSensors[i].errorCnt = 0;
+              oneWireSensors[i].bus = 0;
+              sendStr += dropStr;
             }
+          } else {                             // TODO be more aggressive in case of error (new requestTemperatures or even depower and reset?)
+            oneWireSensors[i].retryCnt++;
+            break;
           }
+          sendMsg(sendStr);
+          oneWireSensors[i].state = FINISHED;
         }
-      }
-      for (byte j = 0; j < sizeof(oneWireBusPins); j++) {
-        // still waiting for some buses to convert, return
-        if (oneWireBusDallasFinished[j] == false) return;
-      }
-      oneWireState++;
-    case 4: // all done, power off and sleep
-      for (byte i = 0; i < sizeof(oneWireBusPins); i++) {
-        oneWireBus[i]->depower();       // not sure if both commands are necessary
-        oneWireBus[i]->reset();
-      }
-      oneWireTimer.sleep(ONEWIRE_CYCLE - 1000);
-      oneWireState = 0;
-      break;
+        break;
+    }
   }
+  for (byte i = 0; i < ONEWIRE_MAX_SENSORS; i++) {
+    // still waiting for some recognised sensors to finish, return
+    if ((dallas[oneWireSensors[i].bus]->validFamily(oneWireSensors[i].addr) || (oneWireSensors[i].addr[0] == 38)) && (oneWireSensors[i].state != FINISHED)) return;
+  }
+  // all onewire sensors finished reading, search new sensors, reset state and sleep
+  searchOnewire();
+  for (byte i = 0; i < ONEWIRE_MAX_SENSORS; i++) {
+    oneWireSensors[i].state = 0;
+  }
+  for (byte i = 0; i < sizeof(oneWirePins); i++) {
+    oneWire[i]->depower();       // not sure if both commands are necessary
+    oneWire[i]->reset();
+  }
+  oneWireTimer.sleep(ONEWIRE_CYCLE);
 #endif /* USE_ONEWIRE */
 }
 
@@ -400,135 +418,142 @@ void readDht() {
   if (!dhtTimer.isOver()) {
     return;
   }
-  switch (dhtState) {
-    case 0:     // Power on buses, if you use transistor switch, the logic is reversed
-#ifdef DHT_POWER_PIN
-      if (DHT_POWER_PIN) digitalWrite(DHT_POWER_PIN, HIGH);
-      dhtTimer.sleep(1000);
-#endif /* DHT_POWER_PIN */
-      dhtState++;
-      break;
-    case 1: // Read DHT sensors
-      for (byte i = 0; i < sizeof(dhtSensorPins); i++) {
-        float temp = dhtSensor[i]->readTemperature();
-        float humid = dhtSensor[i]->readHumidity();
-        String sendStr;
-        sendStr += dhtStr;
-        sendStr += String(i + 1, DEC);
-        sendStr += " ";
-        if (!isnan(temp) && !isnan(humid)) {
-          if (DHT_TEMP_HYSTERESIS && ((abs(temp - dhtSensors[i].oldTemp) <= DHT_TEMP_HYSTERESIS) && (abs(humid - dhtSensors[i].oldHumid) <= DHT_HUMID_HYSTERESIS))) continue;
-          dhtSensors[i].oldTemp = temp;
-          dhtSensors[i].oldHumid = humid;
-          sendStr += tempStr;
-          sendStr += " ";
-          sendStr += String(temp, 1);
-          sendStr += " ";
-          sendStr += humidStr;
-          sendStr += " ";
-          sendStr += String(humid, 1);
-          sendMsg(sendStr);
-        } else {
-          sendStr += errorStr;
-          dhtError = true;
+  for (byte i = 0; i < sizeof(dhtPins); i++) {
+    if (dhtSensors[i].state == FINISHED) continue;     // This sensor is finished, continue the for loop with the next one.
+    switch (dhtSensors[i].state) {
+      case 0:                       // Initialize new reading
+        dht[i]->powerUp();
+        dhtSensors[i].state++;
+        break;
+      case 1:                       // Wait for the reading to finish and process the results
+        { // yes, we need these brackets
+          int chk = dht[i]->read();
+          if (chk != DHTLIB_WAITING_FOR_READ) {
+            String sendStr;
+            sendStr += dhtStr;
+            sendStr += String(i + 1, DEC);
+            sendStr += " ";
+            if (chk == DHTLIB_OK) {
+              dhtSensors[i].retryCnt = 0;
+              if (DHT_TEMP_HYSTERESIS && ((abs(dht[i]->getTemperature() - dhtSensors[i].oldTemp) <= DHT_TEMP_HYSTERESIS) && (abs(dht[i]->getHumidity() - dhtSensors[i].oldHumid) <= DHT_HUMID_HYSTERESIS))) {
+                dhtSensors[i].state++;
+                break;                  // break the switch-case, in order to avoid sendMsg(sendStr);
+              }
+              dhtSensors[i].oldTemp = dht[i]->getTemperature();     // getTemperature() only returns stored value, does not perform new reading (we can thus call it any times we want)
+              dhtSensors[i].oldHumid = dht[i]->getHumidity();
+              sendStr += tempStr;
+              sendStr += " ";
+              sendStr += String(dhtSensors[i].oldTemp, 1);
+              sendStr += " ";
+              sendStr += humidStr;
+              sendStr += " ";
+              sendStr += String(dhtSensors[i].oldHumid, 1);
+            } else if (dhtSensors[i].retryCnt == DHT_MAX_RETRY) {   // error detected, treshold reached
+              dhtSensors[i].retryCnt = 0;
+              sendStr += errorStr;
+            } else {
+              dhtSensors[i].retryCnt++;
+              dhtSensors[i].state = 0;      // repeat the first step (incl. short nap)
+              return;        // do not send message yet, retry the same sensor
+            }
+            sendMsg(sendStr);
+            dhtSensors[i].state++;
+          }
+          break;
         }
-        sendMsg(sendStr);
-      }
-      dhtState++;
-      break;
-    case 2: // Power off in case of error, sleep
-#ifdef DHT_POWER_PIN
-      if (dhtError == true) digitalWrite(DHT_POWER_PIN, LOW);
-      dhtTimer.sleep(DHT_CYCLE - 1000);
-#else /* DHT_POWER_PIN */
-      dhtTimer.sleep(DHT_CYCLE);
-#endif /* DHT_POWER_PIN */
-      dhtError = false;
-      dhtState = 0;
-      break;
+      case 2: // Sensor done, set the data pin to LOW
+        dht[i]->powerDown();
+        dhtSensors[i].state = FINISHED;
+        break;
+    }
   }
+  for (byte i = 0; i < sizeof(dhtPins); i++) {
+    // still waiting for some sensors to finish, return
+    if (dhtSensors[i].state != FINISHED) return;
+  }
+  // all dht sensors finished reading, reset state and sleep
+  for (byte i = 0; i < sizeof(dhtPins); i++) {
+    dhtSensors[i].state = 0;
+  }
+  dhtTimer.sleep(DHT_CYCLE);
 #endif /* USE_DHT */
 }
 
 void readLight() {
 #ifdef USE_LIGHT
-  if (Wire.getWireTimeoutFlag()) {
-    Wire.clearWireTimeoutFlag();
-    Wire.end();
-    Wire.begin();
-    // reinitialize everything (not sure if all steps are actually needed)
-    //    Wire.setWireTimeout(25000, false);    // I2C timeout 25ms to prevent lockups (latest Wire.h needed for this function)
-    //    for (byte i = 0; i < sizeof(lightSensorPins); i++) {
-    //      lightSensor[i] = new BH1750FVI(0x5C);   // 0x5C means that sensor will be read if address pin is set to HIGH
-    //      lightSensor[i]->powerOn();
-    //      lightSensor[i]->setContHigh2Res();
-    //    }
-    String sendStr;
-    sendStr += lightStr;      // we do not know which sensor caused the error
-    sendStr += " ";
-    sendStr += errorStr;
-    sendMsg(sendStr);
-  }
   if (!lightTimer.isOver()) {
     return;
   }
-  switch (lightState) {
-    case 0:
-      for (byte i = 0; i < sizeof(lightSensorPins); i++) {
-        if (lightSensors[i].state == FINISHED) continue;     // sensor is finished, continue with the next one
-        switch (lightSensors[i].state) {
-          case 0:                       // Set address pin, take a short nap
-            digitalWrite(lightSensorPins[i], HIGH);
-            lightTimer.sleep(100);
-            lightSensors[i].state++;
-            break;
-          case 1:
-            if (lightSensor[i]->isReady()) {
-              float lux = lightSensor[i]->getLux();
-              String sendStr;
-              sendStr += lightStr;
-              sendStr += String(i + 1, DEC);
-              sendStr += " ";
-              if (lux != 54612) {
-                if (LIGHT_HYSTERESIS && (abs(lux - lightSensors[i].oldLux) <=  LIGHT_HYSTERESIS)) {
-                  lightSensors[i].state++;
-                  break;
-                }
-                lightSensors[i].oldLux = lux;
-                sendStr += String(lux, 1);
-              } else {
-                sendStr += errorStr;
-              }
-              sendMsg(sendStr);
-              lightSensors[i].state++;
-            }
-            break;
-          case 2: // Sensor done, set the address pin
-            digitalWrite(lightSensorPins[i], LOW);
-            lightSensors[i].state = FINISHED;
-            break;
+  for (byte i = 0; i < sizeof(lightPins); i++) {
+    if (lightSensors[i].state == FINISHED) continue;     // This sensor is finished, continue the for loop with the next one.
+    if (Wire.getWireTimeoutFlag()) {                // Check I2C bus for errors.
+      Wire.clearWireTimeoutFlag();
+      Wire.end();
+      Wire.begin();       // Re-initialise the I2C bus after failure. It seems that it is not necessary to re-initialize sensors themselves.
+      String sendStr;
+      sendStr += lightStr;
+      sendStr += String(i + 1, DEC);
+      sendStr += " ";
+      sendStr += errorStr;
+      sendMsg(sendStr);
+    }
+    switch (lightSensors[i].state) {
+      case 0:                       // Set address pin, take a short nap
+        for (byte j = 0; j < sizeof(lightPins); j++) {
+          if (i == j) continue;
+          digitalWrite(lightPins[j], LOW);    // only precaution, just to make sure all other sensors are LOW
         }
-        break;    // Break the for loop (deal with next sensor only after the previous finishes reading
-      }
-      for (byte i = 0; i < sizeof(lightSensorPins); i++) {
-        // still waiting for some sensors to finish, return
-        if (lightSensors[i].state != FINISHED) return;
-      }
-      lightState++;
-      break;
-    case 1: // all light sensors finished reading, sleep
-      lightTimer.sleep(LIGHT_CYCLE);
-      lightState = 0;
-      for (byte i = 0; i < sizeof(lightSensorPins); i++) {
-        lightSensors[i].state = 0;
-        digitalWrite(lightSensorPins[i], LOW);    // just to make sure all sensors' address is low
-      }
-      break;
+        digitalWrite(lightPins[i], HIGH);
+        lightTimer.sleep(20);         // just a precaution
+        lightSensors[i].state++;
+        break;
+      case 1:
+        if (bh1750[i]->isReady()) {
+          float lux = bh1750[i]->getLux();
+          String sendStr;
+          sendStr += lightStr;
+          sendStr += String(i + 1, DEC);
+          sendStr += " ";
+          if (bh1750[i]->getError() == BH1750FVI_OK) {
+            if (LIGHT_HYSTERESIS && (abs(lux - lightSensors[i].oldLux) <=  LIGHT_HYSTERESIS)) {
+              lightSensors[i].retryCnt = 0;
+              lightSensors[i].state++;
+              break;                  // break the switch-case, in order to avoid sendMsg(sendStr);
+            }
+            lightSensors[i].oldLux = lux;
+            sendStr += String(lux, lightDecPlaces);
+          } else if (lightSensors[i].retryCnt == LIGHT_MAX_RETRY) {   // error detected, treshold reached
+            sendStr += errorStr;
+          } else {        // error detected
+            lightSensors[i].retryCnt++;
+            lightSensors[i].state = 0;      // repeat the first step (incl. short nap)
+            return;        // do not send message yet, retry the same sensor
+          }
+          sendMsg(sendStr);
+          lightSensors[i].retryCnt = 0;   // because new reading was sent or LIGHT_MAX_RETRY was reached
+          lightSensors[i].state++;
+        }
+        break;
+      case 2: // Sensor done, set the address pin to LOW
+        digitalWrite(lightPins[i], LOW);
+        lightSensors[i].state = FINISHED;
+        break;
+    }
+    break;    // Break the for loop, because we can only talk to next sensor after the previous sensor is FINISHED (and its addr pin is set to LOW)!
   }
+  for (byte i = 0; i < sizeof(lightPins); i++) {
+    // still waiting for some sensors to finish, return
+    if (lightSensors[i].state != FINISHED) return;
+  }
+  // all light sensors finished reading, reset state and sleep
+  for (byte i = 0; i < sizeof(lightPins); i++) {
+    lightSensors[i].state = 0;
+  }
+  lightTimer.sleep(LIGHT_CYCLE);
 #endif /* USE_LIGHT */
 }
 
-void sendMsg(const String& sendStr) {
+void sendMsg(const String & sendStr) {
   if (Ethernet.hardwareStatus() != EthernetNoHardware) {
     udpSend.beginPacket(sendIpAddress, remPort);
     udpSend.print(railStr);
@@ -544,7 +569,7 @@ void sendMsg(const String& sendStr) {
   dbgln(sendStr);
 }
 
-boolean receivePacket(String *cmd) {
+boolean receivePacket(String * cmd) {
   int packetSize = udpRecv.parsePacket();
   if (packetSize) {
     memset(inputPacketBuffer, 0, sizeof(inputPacketBuffer));
