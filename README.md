@@ -16,18 +16,18 @@ Pick your favourite sensors. At the moment the following sensors are supported:
 * BH1750FVI light sensors (via I2C bus)
 * Pt100, Pt1000  resistance temperature sensors (using MAX31865 module, via SPI bus)
 
-You can put multiple 1-wire sensors on a single bus. You can have multiple 1-wire buses, DHT sensors or light sensors. 
+You can put multiple 1-wire sensors on a single bus. You can have multiple 1-wire buses, DHT, RTD or light sensors. 
 
-Now go to the config.h file where you will find connection schema and configuration for each sensor type. You only need to:
+Now go to the config.h file where you will find wiring schema and configuration for each sensor type. You only need to:
 
 - Connect your sensor(s) according to the provided schema.
  - Enable sensor type by uncommenting the "USE_..." definition.
- - Specify pin numbers you use for connecting data pins (address pins) from your sensors.
+ - Specify pin numbers you use for connecting data pins (address pins) of your sensors.
  - Configure read cycle, hysteresis, resolution (if available).
 
-Configure your network settings, upload your sketch to Arduino and watch your sensor data coming in via UDP messages (check the config.h file for UDP output examples).
+Configure your network settings, upload your sketch to Arduino and watch your sensor data coming in via UDP messages (check the config.h file for UDP output syntax and examples).
 
-If you decide to add new sensor later on, you only need to edit the config.h file and (re)upload the sketch to your Arduino. Do you need additional DHT22 sensor? Connect the sensor's data pin to Arduino, add new pin number to the "dhtPins" array in config.h and upload your program to Arduino. No need to mess with the main program! You are only limited by the amount of flash memory (each sensor type requires additional flash), amount of available SRAM memory (we use it for storing 1-wire sensors' addresses and past sensor readings) and the number of available pins (remember you can use analog pins as digital ones).
+If you decide to add new sensor later on, you only need to edit the config.h file and (re)upload the sketch to your Arduino. Do you need additional DHT22 sensor? Connect the sensor's data pin to Arduino, add new pin number to the "dhtPins" array in config.h and upload your program to Arduino. No need to mess with the main program! You are only limited by the amount of flash memory (each sensor type requires additional flash), amount of available SRAM memory (we use it for storing 1-wire sensors' addresses and past sensor readings) and the number of available pins (remember you can also use analog pins as digital ones).
 
 You do not need to worry about delays when reading large number of sensors at the same time. The program is fast and non-blocking.
 

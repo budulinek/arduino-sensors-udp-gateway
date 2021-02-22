@@ -151,7 +151,6 @@ int lightRequest = SCHEDULED;
 #define RREF      430.0
 #define RNOMINAL  100.0
 #endif
-
 Adafruit_MAX31865 *rtd[sizeof(rtdPins)];
 // store RTD sensor values
 typedef struct {
@@ -167,7 +166,35 @@ int rtdRequest = SCHEDULED;
 void setup() {
 
   Serial.begin(115200);
-  // TODO: debug info summarizing all settings
+  while (!Serial);    // wait for serial port to connect. Needed for native USB
+  dbgln(F("*"));
+  dbgln(F("* Overview of configured sensors:"));
+  dbgln(F("*"));
+#ifdef USE_ONEWIRE
+  dbg(F("* "));
+  dbg(sizeof(oneWirePins));
+  dbgln(F(" OneWire bus(es)"));
+#endif /* USE_ONEWIRE */
+#ifdef USE_DHT
+  dbg(F("* "));
+  dbg(sizeof(dhtPins));
+  dbgln(F(" DHT sensor(s)"));
+#endif /* USE_DHT */
+#ifdef USE_LIGHT
+  dbg(F("* "));
+  dbg(sizeof(lightPins));
+  dbgln(F(" light sensor(s)"));
+#endif /* USE_LIGHT */
+#ifdef USE_RTD
+  dbg(F("* "));
+  dbg(sizeof(rtdPins));
+  dbgln(F(" RTD sensor(s)"));
+#endif /* USE_RTD */
+#if !defined(USE_ONEWIRE) && !defined(USE_DHT) && !defined(USE_LIGHT) && !defined(USE_RTD)
+  dbgln(F("* No sensor configured, check config.h"));
+#endif /* No config */
+  dbgln(F("*"));
+
 #ifdef ETH_RESET_PIN
   if (ETH_RESET_PIN) {
     pinMode(ETH_RESET_PIN, OUTPUT);
@@ -222,7 +249,7 @@ void setup() {
   Wire.setWireTimeout(25000, false);    // I2C timeout 25ms to prevent lockups, no need to do HW reset. Latest Wire.h needed for this function.
   // Unlike DHT sensors (which have separate DATA pins), all light sensors share the same data line (I2C bus).
   // Unlike onewire sensors, light sensors are not individually addressable, they can only be addressed by setting the address pin LOW or HIGH.
-  // Therefore, before communicating via I2C, we have to make sure that only one sensor has address pin set to HIGH.
+  // We use address pin as "chip select", therefore we have to make sure that only one sensor has address pin set to HIGH.
   for (byte i = 0; i < sizeof(lightPins); i++) {
     pinMode(lightPins[i], OUTPUT);
     digitalWrite(lightPins[i], LOW);

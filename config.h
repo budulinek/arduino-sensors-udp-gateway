@@ -1,5 +1,5 @@
 /* Use this file  to configure your sensors.
- - Connect your sensor(s) according to schema. Pin numbers in schematics correspond to Arduino Uno / Nano pinouts.
+ - Connect your sensor(s) according to schema. Pin numbers correspond to Arduino Uno / Nano pinout.
  - Enable sensor type by uncommenting the "USE_..." definition.
  - Specify pin numbers you use for connecting data wires (address wires) from your sensors. If you run out of digital pins, use analog pins A0 to A5 instead (simply use digits 14 to 19).
  - Configure read cycle, hysteresis, resolution (if available) 
@@ -11,7 +11,7 @@
 
   Shields: W5500, W5200, W5100
   Pins 10, 11, 12, 13 are reserved for the SPI comunication with the ethernet shield.
-      
+  MAC address is generated randomly and stored in EEPROM.
 */
 unsigned int listenPort = 10032;                // local listening port
 unsigned int sendPort = 10000;                  // local sending port
@@ -56,8 +56,8 @@ byte oneWirePins[] = {2, 3, 4};                 // 1-wire buses. One pin for eac
 
   SENSOR      <->      ARDUINO
   Vcc         <->      5V
-  Data        <->      dhtPins (one pin for each sensor)
   GND         <->      GND
+  Data        <->      dhtPins (one pin for each sensor)
 
   UDP output examples:
      Sensor 3 reading(temp°C humid%):  ardu1 dht3 temp 25.3 humid 42.0
@@ -76,8 +76,8 @@ byte dhtPins[] = {14, 15, 16};                  // DHT data pins. One pin for ea
   SENSOR      <->      ARDUINO
   Vcc         <->      5V
   GND         <->      GND
-  SCL         <->      A5/SCL
-  SDA         <->      A4/SDA
+  SCL         <->      A5 (SCL)
+  SDA         <->      A4 (SDA)
   ADDR        <->      lightPins (one pin for each sensor)
 
   UDP output examples:
@@ -95,6 +95,9 @@ static const float lightResolution = 0.5;       // Resolution in lux, available 
 /* RTD SETTINGS
   Sensors: Pt100, Pt1000 (using MAX31865 module)
 
+  SENSOR      <->      MAX31865
+        2, 3 or 4 wires
+
   MAX31865    <->      ARDUINO
   Vcc         <->      5V
   GND         <->      GND
@@ -108,7 +111,7 @@ static const float lightResolution = 0.5;       // Resolution in lux, available 
      Sensor 3 error:            ardu1 rtd3 error
 */
 // #define USE_RTD              // Uncomment to enable RTD sensors
-byte rtdPins[] = {9};           // CS pins, one digital pin for each MAX31865 module
+byte rtdPins[] = {9};           // CS pins, one pin for each MAX31865 module
 #define RTD_TYPE 1000           // Set 100 for Pt100 sensor, 1000 for Pt1000 (default is 100)
                                 // You MUST use corresponding reference resistor (Rref) on your MAX31865 module:
                                 //       - For the Pt100 sensor, use 430 ohm 0.1% resistor (marking is 4300)
