@@ -10,7 +10,6 @@
     GNU General Public License for more details.
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 */
 
 #include <Ethernet.h>
@@ -37,19 +36,13 @@ byte mac[6] = { 0x90, 0xA2, 0xDA, 0x00, 0x00, 0x00 };
 #define BUFFER_SIZE 65                           // size of UDP input and output buffers (1 byte for NULL)
 #define UDP_TX_PACKET_MAX_SIZE BUFFER_SIZE
 char inputPacketBuffer[BUFFER_SIZE];
+char outputPacketBuffer[BUFFER_SIZE];
 
 // strings we use frequently
 #define railStr F("ardu")
-#define oneWireStr F("1w")
-#define detectedStr F("detected")
-#define unknownStr F("unknown")
 #define errorStr F("error")
-#define dropStr F("dropped")
-#define dhtStr F("dht")
 #define rstStr F("rst")
 #define tempStr F("temp")
-#define humidStr F("humid")
-#define lightStr F("light")
 
 #define SCHEDULED -2
 #define ALL -1
@@ -86,6 +79,10 @@ EthernetUDP udpSend;
 #endif /* DEBUG */
 
 #ifdef USE_ONEWIRE
+#define oneWireStr F("1w")
+#define detectedStr F("detected")
+#define unknownStr F("unknown")
+#define dropStr F("dropped")
 OneWire *oneWire[sizeof(oneWirePins)];
 DS2438 *ds2438[sizeof(oneWirePins)];
 DallasTemperature *dallas[sizeof(oneWirePins)];
@@ -101,9 +98,16 @@ typedef struct {
 oneWireSensor oneWireSensors[ONEWIRE_MAX_SENSORS];
 int oneWireRequest = SCHEDULED;                 // request command from UDP (TODO)
 Timer oneWireTimer;
+#if ((ONEWIRE_RESOLUTION == 11) || (ONEWIRE_RESOLUTION == 12))
+#define ONEWIRE_DEC_PLACES 1
+#else
+#define ONEWIRE_DEC_PLACES 0
+#endif
 #endif /* USE_ONEWIRE */
 
 #ifdef USE_DHT
+#define dhtStr F("dht")
+#define humidStr F("humid")
 DHTNEW *dht[sizeof(dhtPins)];
 // store DHT sensor values
 typedef struct {
@@ -118,8 +122,9 @@ int dhtRequest = SCHEDULED;
 #endif /* USE_DHT */
 
 #ifdef USE_LIGHT
+#define lightStr F("light")
 BH1750FVI *bh1750[sizeof(lightPins)];
-byte lightDecPlaces = 1;
+byte lightDecPlaces = 0;
 // store lightWire sensors
 typedef struct {
   float oldLux;
@@ -135,7 +140,6 @@ void setup() {
 
   Serial.begin(115200);
   // TODO: debug info summarizing all settings
-
 #ifdef ETH_RESET_PIN
   if (ETH_RESET_PIN) {
     pinMode(ETH_RESET_PIN, OUTPUT);
@@ -329,7 +333,7 @@ void readOnewire() {
             oneWireSensors[i].oldTemp = tempC;
             sendStr += tempStr;
             sendStr += " ";
-            sendStr += String(tempC, 2);
+            sendStr += String(tempC, ONEWIRE_DEC_PLACES);
           } else if (oneWireSensors[i].retryCnt == ONEWIRE_MAX_RETRY) {   // error detected, ONEWIRE_MAX_RETRY treshold reached
             sendStr += errorStr;
             oneWireSensors[i].retryCnt = 0;
@@ -343,7 +347,7 @@ void readOnewire() {
               oneWireSensors[i].bus = 0;
               sendStr += dropStr;
             }
-          } else {                             // TODO be more aggressive in case of error (new requestTemperatures or even depower and reset?)
+          } else {
             oneWireSensors[i].retryCnt++;
             dallas[oneWireSensors[i].bus]->requestTemperaturesByAddress(oneWireSensors[i].addr);
             break;
@@ -367,7 +371,7 @@ void readOnewire() {
               oneWireSensors[i].state++;
               break;                  // break the switch-case, in order to avoid sendMsg(sendStr)
             }
-            sendStr += String(temp, 2);
+            sendStr += String(temp, 1);
             sendStr += " ";
             sendStr += String(ds2438[oneWireSensors[i].bus]->getVoltage(DS2438_CHA), 2);
             sendStr += " ";
@@ -435,7 +439,7 @@ void readDht() {
             sendStr += " ";
             if (chk == DHTLIB_OK) {
               dhtSensors[i].retryCnt = 0;
-              if (DHT_TEMP_HYSTERESIS && ((abs(dht[i]->getTemperature() - dhtSensors[i].oldTemp) <= DHT_TEMP_HYSTERESIS) && (abs(dht[i]->getHumidity() - dhtSensors[i].oldHumid) <= DHT_HUMID_HYSTERESIS))) {
+              if (DHT_TEMP_HYSTERESIS && DHT_HUMID_HYSTERESIS && (abs(dht[i]->getTemperature() - dhtSensors[i].oldTemp) <= DHT_TEMP_HYSTERESIS) && (abs(dht[i]->getHumidity() - dhtSensors[i].oldHumid) <= DHT_HUMID_HYSTERESIS)) {
                 dhtSensors[i].state++;
                 break;                  // break the switch-case, in order to avoid sendMsg(sendStr);
               }
