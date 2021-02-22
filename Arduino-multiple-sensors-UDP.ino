@@ -29,6 +29,9 @@
 #ifdef USE_LIGHT
 #include <BH1750FVI.h>              // BH1750FVI_RT https://github.com/RobTillaart/BH1750FVI_RT
 #endif /* USE_LIGHT */
+#ifdef USE_RTD
+#include <Adafruit_MAX31865.h>    // Adafruit MAX31865 https://github.com/adafruit/Adafruit_MAX31865
+#endif /* USE_RTD */
 
 // App will generate unique MAC address, bytes 4, 5 and 6 will hold random value
 byte mac[6] = { 0x90, 0xA2, 0xDA, 0x00, 0x00, 0x00 };
@@ -136,6 +139,31 @@ Timer lightTimer;
 int lightRequest = SCHEDULED;
 #endif /* USE_LIGHT */
 
+#ifdef USE_RTD
+#define rtdStr F("rtd")
+#if (RTD_TYPE == 1000)
+// The value of the Rref resistor. Use 430.0 for PT100 and 4300.0 for PT1000
+#define RREF      4300.0
+// The 'nominal' 0-degrees-C resistance of the sensor
+// 100.0 for PT100, 1000.0 for PT1000
+#define RNOMINAL  1000.0
+#else
+#define RREF      430.0
+#define RNOMINAL  100.0
+#endif
+
+Adafruit_MAX31865 *rtd[sizeof(rtdPins)];
+// store RTD sensor values
+typedef struct {
+  float oldTemp;
+  byte retryCnt;           // number of attempts to read
+  byte state;              // state of the reading process for individual sensor
+} rtdSensor;
+rtdSensor rtdSensors[sizeof(rtdPins)];
+Timer rtdTimer;
+int rtdRequest = SCHEDULED;
+#endif /* USE_RTD */
+
 void setup() {
 
   Serial.begin(115200);
@@ -212,6 +240,21 @@ void setup() {
   }
   if (lightResolution == 0.5) lightDecPlaces = 1;
 #endif /* USE_LIGHT */
+
+#ifdef USE_RTD
+  for (byte i = 0; i < sizeof(rtdPins); i++) {
+    rtd[i] = new Adafruit_MAX31865(rtdPins[i]);
+    rtd[i]->begin();
+    rtd[i]->enableBias(true);
+    rtd[i]->enable50Hz(true);
+    rtd[i]->autoConvert(true);
+#if (RTD_WIRES == 3)
+    rtd[i]->setWires(1);
+#else
+    rtd[i]->setWires(0);
+#endif
+  }
+#endif /* USE_RTD */
 }
 
 void loop() {
@@ -219,6 +262,7 @@ void loop() {
   readOnewire();
   readDht();
   readLight();
+  readRtd();
 
   if (Ethernet.hardwareStatus() != EthernetNoHardware) {
     processCommands();
@@ -557,6 +601,71 @@ void readLight() {
 #endif /* USE_LIGHT */
 }
 
+void readRtd() {
+#ifdef USE_RTD
+  if (!rtdTimer.isOver()) {
+    return;
+  }
+  for (byte i = 0; i < sizeof(rtdPins); i++) {
+    if (rtdSensors[i].state == FINISHED) continue;     // This sensor is finished, continue the for loop with the next one.
+    switch (rtdSensors[i].state) {
+      case 0:                       // Initialize new reading, TODO: nonblocking
+        //
+        rtdTimer.sleep(100);
+        rtdSensors[i].state++;
+        break;
+      case 1:                       // Wait for the reading to finish and process the results
+        { // yes, we need these brackets
+          String sendStr;
+          sendStr += rtdStr;
+          sendStr += String(i + 1, DEC);
+          sendStr += " ";
+          float newTemp = rtd[i]->temperature(RNOMINAL, RREF);
+          if (!rtd[i]->readFault() && (int)newTemp != -242) {
+            rtdSensors[i].retryCnt = 0;
+            if (RTD_HYSTERESIS && (abs(newTemp - rtdSensors[i].oldTemp) <= RTD_HYSTERESIS)) {
+              rtdSensors[i].state++;
+              break;                  // break the switch-case, in order to avoid sendMsg(sendStr);
+            }
+            rtdSensors[i].oldTemp = newTemp;     // getTemperature() only returns stored value, does not perform new reading (we can thus call it any times we want)
+            sendStr += tempStr;
+            sendStr += " ";
+            if (RTD_HYSTERESIS >= 1) {
+              sendStr += String(rtdSensors[i].oldTemp, 0);
+            } else {
+              sendStr += String(rtdSensors[i].oldTemp, 1);
+            }
+          } else if (rtdSensors[i].retryCnt == RTD_MAX_RETRY) {   // error detected, treshold reached
+            rtd[i]->clearFault();
+            rtdSensors[i].retryCnt = 0;
+            sendStr += errorStr;
+          } else {
+            rtd[i]->clearFault();
+            rtdSensors[i].retryCnt++;
+            rtdSensors[i].state = 0;      // repeat the first step (incl. short nap)
+            return;        // do not send message yet, retry the same sensor
+          }
+          sendMsg(sendStr);
+          rtdSensors[i].state++;
+          break;
+        }
+      case 2: // Sensor done
+        rtdSensors[i].state = FINISHED;
+        break;
+    }
+  }
+  for (byte i = 0; i < sizeof(rtdPins); i++) {
+    // still waiting for some sensors to finish, return
+    if (rtdSensors[i].state != FINISHED) return;
+  }
+  // all rtd sensors finished reading, reset state and sleep
+  for (byte i = 0; i < sizeof(rtdPins); i++) {
+    rtdSensors[i].state = 0;
+  }
+  rtdTimer.sleep(RTD_CYCLE);
+#endif /* USE_RTD */
+}
+
 void sendMsg(const String & sendStr) {
   if (Ethernet.hardwareStatus() != EthernetNoHardware) {
     udpSend.beginPacket(sendIpAddress, remPort);
@@ -600,13 +709,13 @@ void processCommands() {
     if (cmd == rstStr) {
       delay(100);
       resetFunc();
-    } else if (cmd.startsWith(dhtStr)) {
-      if (cmd == dhtStr) {
-        //        readDhtSensors("all");
-      } else {
-        cmd.replace(dhtStr, "");
-        //        readDhtSensors(cmd);
-      }
+      //    } else if (cmd.startsWith(dhtStr)) {
+      //      if (cmd == dhtStr) {
+      //        readDhtSensors("all");
+      //      } else {
+      //        cmd.replace(dhtStr, "");
+      //        readDhtSensors(cmd);
+      //      }
     }
   }
 }

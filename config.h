@@ -1,7 +1,7 @@
 /* Use this file  to configure your sensors.
- - Connect your sensor(s) according to schematics. Pin numbers in schematics correspond to Arduino Uno / Nano pinouts.
+ - Connect your sensor(s) according to schema. Pin numbers in schematics correspond to Arduino Uno / Nano pinouts.
  - Enable sensor type by uncommenting the "USE_..." definition.
- - Specify data pins (address pins) for your sensors. If you run out of digital pins, use analog pins A0 to A5 instead (simply use digits 14 to 19).
+ - Specify pin numbers you use for connecting data wires (address wires) from your sensors. If you run out of digital pins, use analog pins A0 to A5 instead (simply use digits 14 to 19).
  - Configure read cycle, hysteresis, resolution (if available) 
 */
 
@@ -64,7 +64,7 @@ byte oneWirePins[] = {2, 3, 4};                 // 1-wire buses. One pin for eac
      Sensor 3 error:                   ardu1 dht3 error
 */
 // #define USE_DHT                              // Uncomment to enable DHT sensors
-byte dhtPins[] = {14, 15, 16};                  // Data pins. One pin for each sensor.
+byte dhtPins[] = {14, 15, 16};                  // DHT data pins. One pin for each sensor.
 #define DHT_CYCLE 20000                         // DHT sensors read cycle in ms
 #define DHT_MAX_RETRY 5                         // Number of attempts to read sensor data before error is sent.
 #define DHT_TEMP_HYSTERESIS 0.05                // Hysteresis in °C (send value only if difference between new and old value is larger or equal to hysteresis)
@@ -85,9 +85,38 @@ byte dhtPins[] = {14, 15, 16};                  // Data pins. One pin for each s
      Light sensor 2 error:           ardu1 light2 error
 */
 // #define USE_LIGHT                            // Uncomment to enable light sensors
-byte lightPins[] = {17, 9};                     // Address pins. One pin for each sensor.
+byte lightPins[] = {17, 9};                     // I2C Address pins. One pin for each sensor.
 #define LIGHT_CYCLE 1000                        // Light sensors read cycle in ms
 #define LIGHT_MAX_RETRY 5                       // Number of attempts to read sensor data before error is sent.
 static const float lightResolution = 0.5;       // Resolution in lux, available options: 4, 1 or 0.5 (default is 1 lux)
                                                 // Decimal points in UDP output are adjusted automatically.
 #define LIGHT_HYSTERESIS 0.5                    // Hysteresis in lux (send  value only if difference between new and old value is larger or equal to hysteresis)
+
+/* RTD SETTINGS
+  Sensors: Pt100, Pt1000 (using MAX31865 module)
+
+  MAX31865    <->      ARDUINO
+  Vcc         <->      5V
+  GND         <->      GND
+  SDI         <->      D11 (MOSI)
+  SDO         <->      D12 (MISO)
+  CLK         <->      D13 (SCK)
+  CS          <->      rtdPins (one pin for each MAX31865 module)
+
+  UDP output examples:
+     Sensor 3 reading(temp°C):  ardu1 rtd3 temp 25.3
+     Sensor 3 error:            ardu1 rtd3 error
+*/
+// #define USE_RTD              // Uncomment to enable RTD sensors
+byte rtdPins[] = {9};           // CS pins, one digital pin for each MAX31865 module
+#define RTD_TYPE 1000           // Set 100 for Pt100 sensor, 1000 for Pt1000 (default is 100)
+                                // You MUST use corresponding reference resistor (Rref) on your MAX31865 module:
+                                //       - For the Pt100 sensor, use 430 ohm 0.1% resistor (marking is 4300)
+                                //       - For the Pt1000 sensor, use 4300 ohm 0.1% resistor (marking is 4301)
+                                // MAX31865 modules are usually shipped with 430 ohm Rref (intended for Pt100 sensors). If you want to use Pt1000 sensor, replace the Rref resistor manually.
+#define RTD_WIRES 3             // Number of wires you use for connecting the RTD sensor to the MAX31865 module (2, 3 or 4). 
+                                // For wiring the RTD sensor see https://learn.adafruit.com/adafruit-max31865-rtd-pt100-amplifier/rtd-wiring-config 
+#define RTD_CYCLE 2000          // RTD sensors read cycle in ms
+#define RTD_MAX_RETRY 5         // Number of attempts to read sensor data before error is sent.
+#define RTD_HYSTERESIS 0        // Hysteresis in °C (send value only if difference between new and old value is larger or equal to hysteresis). 
+                                // Decimal points adjusted automatically

@@ -12,8 +12,9 @@ Because the program employs automatic repeat request as an effective error-contr
 Pick your favourite sensors. At the moment the following sensors are supported:
 
 * DS1820, DS18S20, DS18B20, DS1822, DS1825, DS28EA00 and DS2438 temperature sensors (via 1-wire bus)
-* DHT11, DHT12, DHT22 (AM2302), DHT33, DHT44 temperature and humidity sensors (via data line)
+* DHT11, DHT12, DHT22 (AM2302), DHT33, DHT44 temperature and humidity sensors (via data wire)
 * BH1750FVI light sensors (via I2C bus)
+* Pt100, Pt1000  resistance temperature sensors (using MAX31865 module, via SPI bus)
 
 You can put multiple 1-wire sensors on a single bus. You can have multiple 1-wire buses, DHT sensors or light sensors. 
 
@@ -31,7 +32,7 @@ If you decide to add new sensor later on, you only need to edit the config.h fil
 You do not need to worry about delays when reading large number of sensors at the same time. The program is fast and non-blocking.
 
 ## Wait... What about communication errors?
-What if I have twelve 1-wire temperature sensors, sitting on a single bus in star topology (not recommended), running along mains power line (causing interference)? What if I use the I2C bus for connecting three light sensors over 10 m long wires (I2C bus was not designed to go over such distances)?
+What if I have twelve 1-wire temperature sensors, sitting on a single bus in star topology (not recommended), running along mains power line (causing interference)? What if I use the I2C bus for connecting three light sensors over 10 m long wires (I2C bus was not designed to go over such distance)?
 
 Yes, random data transmission errors will occur. But do not worry, your Arduino will handle them! The program employs [automatic repeat request](https://en.wikipedia.org/wiki/Automatic_repeat_request) as an effective error-control method. As a result, we can achieve reliable data transmission (sensor data reading) over an unreliable communication channel (such as 1-wire or I2C over long distances).
 
