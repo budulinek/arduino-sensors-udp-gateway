@@ -1,6 +1,6 @@
 /* Use this file  to configure your sensors.
  - Connect your sensor(s) according to schema. Pin numbers correspond to Arduino Uno / Nano pinout.
- - Enable sensor type by uncommenting the "USE_..." definition.
+ - Enable sensor type by uncommenting the "ENABLE_..." definition.
  - Specify pin numbers you use for connecting data wires (address wires) from your sensors. If you run out of digital pins, use analog pins A0 to A5 instead (simply use digits 14 to 19).
  - Configure read cycle, hysteresis, resolution (if available) 
 */
@@ -40,7 +40,7 @@ byte boardIdentifier = 2;                       // number identifying the board 
      DS2438 sensor reading:          ardu1 1w2 2612c3102004f 25.4 1.23 0.12
      Sensor error:                   ardu1 1w2 2864fc3008082 error
 */
-// #define USE_ONEWIRE                          // Uncomment to enable 1-wire sensors
+// #define ENABLE_ONEWIRE                          // Uncomment to enable 1-wire sensors
 byte oneWirePins[] = {2, 3, 4};                 // 1-wire buses. One pin for each 1-wire bus, no hard limit on the number of sensors per bus.
 #define ONEWIRE_CYCLE 30000                     // 1-wire sensors read cycle in ms
 #define ONEWIRE_MAX_SENSORS 30                  // Maximum number of 1-wire sensors for all buses (limit 255)
@@ -63,7 +63,7 @@ byte oneWirePins[] = {2, 3, 4};                 // 1-wire buses. One pin for eac
      Sensor 3 reading(temp°C humid%):  ardu1 dht3 temp 25.3 humid 42.0
      Sensor 3 error:                   ardu1 dht3 error
 */
-// #define USE_DHT                              // Uncomment to enable DHT sensors
+// #define ENABLE_DHT                              // Uncomment to enable DHT sensors
 byte dhtPins[] = {14, 15, 16};                  // DHT data pins. One pin for each sensor.
 #define DHT_CYCLE 20000                         // DHT sensors read cycle in ms
 #define DHT_MAX_RETRY 5                         // Number of attempts to read sensor data before error is sent.
@@ -84,7 +84,7 @@ byte dhtPins[] = {14, 15, 16};                  // DHT data pins. One pin for ea
      Light sensor 1 reading (lux):   ardu1 light1 123.5
      Light sensor 2 error:           ardu1 light2 error
 */
-// #define USE_LIGHT                            // Uncomment to enable light sensors
+// #define ENABLE_LIGHT                            // Uncomment to enable light sensors
 byte lightPins[] = {17, 9};                     // I2C Address pins. One pin for each sensor.
 #define LIGHT_CYCLE 1000                        // Light sensors read cycle in ms
 #define LIGHT_MAX_RETRY 5                       // Number of attempts to read sensor data before error is sent.
@@ -110,7 +110,7 @@ static const float lightResolution = 0.5;       // Resolution in lux, available 
      Sensor 3 reading(temp°C):  ardu1 rtd3 temp 25.3
      Sensor 3 error:            ardu1 rtd3 error
 */
-// #define USE_RTD              // Uncomment to enable RTD sensors
+// #define ENABLE_RTD              // Uncomment to enable RTD sensors
 byte rtdPins[] = {9};           // CS pins, one pin for each MAX31865 module
 #define RTD_TYPE 1000           // Set 100 for Pt100 sensor, 1000 for Pt1000 (default is 100)
                                 // You MUST use corresponding reference resistor (Rref) on your MAX31865 module:

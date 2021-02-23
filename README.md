@@ -2,11 +2,11 @@
 Arduino sketch which reads multiple types of sensors and sends data via UDP messages. Inspired by https://github.com/PavSedl/RAILDUINO-2.0 
 
 ## What is it good for?
-Arduino serves as a gateway to integrate various sensors into superordinate systems via UDP messages. The sketch is primarily intended for integrating temperature, humidity and light sensors into Loxone home automation system. Loxone can easily parse UDP messages (use "Virtual UDP Input").
+Arduino periodically polls various sensors and pushes sensor data to superordinate system via UDP messages. The sketch is primarily intended for integrating temperature, humidity and light sensors into Loxone home automation system.
 
 The program is very flexible, it reads any combination of supported sensors. You can easily add new sensors in the future, without editing the main program. You are only limited by the number of pins available on your Arduino.
 
-Because the program employs automatic repeat request as an effective error-control method, it is suitable for directly wiring sensors over longer distances (such as sensors in a house) in slightly noisy environment (interference from mains power lines).
+Because the program employs automatic repeat request as an effective error-control method, it is suitable for directly wiring sensors over longer distances (sensors from different rooms wired to single Arduino) in slightly noisy environment (interference from mains power lines).
 
 ## How to use it?
 Pick your favourite sensors. At the moment the following sensors are supported:
@@ -21,7 +21,7 @@ You can put multiple 1-wire sensors on a single bus. You can have multiple 1-wir
 Now go to the config.h file where you will find wiring schema and configuration for each sensor type. You only need to:
 
 - Connect your sensor(s) according to the provided schema.
- - Enable sensor type by uncommenting the "USE_..." definition.
+ - Enable sensor type by uncommenting the "ENABLE_..." definition.
  - Specify pin numbers you use for connecting data pins (address pins) of your sensors.
  - Configure read cycle, hysteresis, resolution (if available).
 

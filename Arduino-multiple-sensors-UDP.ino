@@ -1,4 +1,4 @@
-/*
+  /*
     Copyright (C) 2019  Ing. Pavel Sedlacek, Dusan Zatkovsky, Milan Brejl, Budulinek
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -17,21 +17,21 @@
 #include <EEPROM.h>
 #include <TrueRandom.h>         // https://github.com/sirleech/TrueRandom
 #include "config.h"
-#ifdef USE_ONEWIRE
+#ifdef ENABLE_ONEWIRE
 #include <OneWire.h>                // Onewire https://www.pjrc.com/teensy/td_libs_OneWire.html
 #define REQUIRESALARMS false
 #include <DallasTemperature.h>      // DallasTemperature https://github.com/milesburton/Arduino-Temperature-Control-Library
 #include <DS2438.h>                 // https://github.com/budulinek/arduino-onewire-DS2438
-#endif /* USE_ONEWIRE */
-#ifdef USE_DHT
+#endif /* ENABLE_ONEWIRE */
+#ifdef ENABLE_DHT
 #include <dhtnew.h>                    // DHTNEW https://github.com/RobTillaart/DHTNEW
-#endif /* USE_DHT */
-#ifdef USE_LIGHT
+#endif /* ENABLE_DHT */
+#ifdef ENABLE_LIGHT
 #include <BH1750FVI.h>              // BH1750FVI_RT https://github.com/RobTillaart/BH1750FVI_RT
-#endif /* USE_LIGHT */
-#ifdef USE_RTD
+#endif /* ENABLE_LIGHT */
+#ifdef ENABLE_RTD
 #include <Adafruit_MAX31865.h>    // Adafruit MAX31865 https://github.com/adafruit/Adafruit_MAX31865
-#endif /* USE_RTD */
+#endif /* ENABLE_RTD */
 
 // App will generate unique MAC address, bytes 4, 5 and 6 will hold random value
 byte mac[6] = { 0x90, 0xA2, 0xDA, 0x00, 0x00, 0x00 };
@@ -81,7 +81,7 @@ EthernetUDP udpSend;
 #define dbgln(x...) ;
 #endif /* DEBUG */
 
-#ifdef USE_ONEWIRE
+#ifdef ENABLE_ONEWIRE
 #define oneWireStr F("1w")
 #define detectedStr F("detected")
 #define unknownStr F("unknown")
@@ -106,9 +106,9 @@ Timer oneWireTimer;
 #else
 #define ONEWIRE_DEC_PLACES 0
 #endif
-#endif /* USE_ONEWIRE */
+#endif /* ENABLE_ONEWIRE */
 
-#ifdef USE_DHT
+#ifdef ENABLE_DHT
 #define dhtStr F("dht")
 #define humidStr F("humid")
 DHTNEW *dht[sizeof(dhtPins)];
@@ -122,9 +122,9 @@ typedef struct {
 dhtSensor dhtSensors[sizeof(dhtPins)];
 Timer dhtTimer;
 int dhtRequest = SCHEDULED;
-#endif /* USE_DHT */
+#endif /* ENABLE_DHT */
 
-#ifdef USE_LIGHT
+#ifdef ENABLE_LIGHT
 #define lightStr F("light")
 BH1750FVI *bh1750[sizeof(lightPins)];
 byte lightDecPlaces = 0;
@@ -137,9 +137,9 @@ typedef struct {
 lightSensor lightSensors[sizeof(lightPins)];
 Timer lightTimer;
 int lightRequest = SCHEDULED;
-#endif /* USE_LIGHT */
+#endif /* ENABLE_LIGHT */
 
-#ifdef USE_RTD
+#ifdef ENABLE_RTD
 #define rtdStr F("rtd")
 #if (RTD_TYPE == 1000)
 // The value of the Rref resistor. Use 430.0 for PT100 and 4300.0 for PT1000
@@ -161,7 +161,7 @@ typedef struct {
 rtdSensor rtdSensors[sizeof(rtdPins)];
 Timer rtdTimer;
 int rtdRequest = SCHEDULED;
-#endif /* USE_RTD */
+#endif /* ENABLE_RTD */
 
 void setup() {
 
@@ -170,27 +170,27 @@ void setup() {
   dbgln(F("*"));
   dbgln(F("* Overview of configured sensors:"));
   dbgln(F("*"));
-#ifdef USE_ONEWIRE
+#ifdef ENABLE_ONEWIRE
   dbg(F("* "));
   dbg(sizeof(oneWirePins));
   dbgln(F(" OneWire bus(es)"));
-#endif /* USE_ONEWIRE */
-#ifdef USE_DHT
+#endif /* ENABLE_ONEWIRE */
+#ifdef ENABLE_DHT
   dbg(F("* "));
   dbg(sizeof(dhtPins));
   dbgln(F(" DHT sensor(s)"));
-#endif /* USE_DHT */
-#ifdef USE_LIGHT
+#endif /* ENABLE_DHT */
+#ifdef ENABLE_LIGHT
   dbg(F("* "));
   dbg(sizeof(lightPins));
   dbgln(F(" light sensor(s)"));
-#endif /* USE_LIGHT */
-#ifdef USE_RTD
+#endif /* ENABLE_LIGHT */
+#ifdef ENABLE_RTD
   dbg(F("* "));
   dbg(sizeof(rtdPins));
   dbgln(F(" RTD sensor(s)"));
-#endif /* USE_RTD */
-#if !defined(USE_ONEWIRE) && !defined(USE_DHT) && !defined(USE_LIGHT) && !defined(USE_RTD)
+#endif /* ENABLE_RTD */
+#if !defined(ENABLE_ONEWIRE) && !defined(ENABLE_DHT) && !defined(ENABLE_LIGHT) && !defined(ENABLE_RTD)
   dbgln(F("* No sensor configured, check config.h"));
 #endif /* No config */
   dbgln(F("*"));
@@ -225,7 +225,7 @@ void setup() {
   udpSend.begin(sendPort);
   sendMsg(rstStr);
 
-#ifdef USE_ONEWIRE
+#ifdef ENABLE_ONEWIRE
   for (byte i = 0; i < sizeof(oneWirePins); i++) {
     oneWire[i] = new OneWire(oneWirePins[i]);
     ds2438[i] = new DS2438(oneWire[i]);
@@ -235,16 +235,16 @@ void setup() {
     dallas[i]->setCheckForConversion(true);
   }
   searchOnewire();
-#endif /* USE_ONEWIRE */
+#endif /* ENABLE_ONEWIRE */
 
-#ifdef USE_DHT
+#ifdef ENABLE_DHT
   for (byte i = 0; i < sizeof(dhtPins); i++) {
     dht[i] = new DHTNEW(dhtPins[i]);
     dht[i]->getType();
   }
-#endif /* USE_DHT */
+#endif /* ENABLE_DHT */
 
-#ifdef USE_LIGHT
+#ifdef ENABLE_LIGHT
   Wire.begin();
   Wire.setWireTimeout(25000, false);    // I2C timeout 25ms to prevent lockups, no need to do HW reset. Latest Wire.h needed for this function.
   // Unlike DHT sensors (which have separate DATA pins), all light sensors share the same data line (I2C bus).
@@ -266,9 +266,9 @@ void setup() {
     lightSensors[i].oldLux = -1;
   }
   if (lightResolution == 0.5) lightDecPlaces = 1;
-#endif /* USE_LIGHT */
+#endif /* ENABLE_LIGHT */
 
-#ifdef USE_RTD
+#ifdef ENABLE_RTD
   for (byte i = 0; i < sizeof(rtdPins); i++) {
     rtd[i] = new Adafruit_MAX31865(rtdPins[i]);
     rtd[i]->begin();
@@ -281,7 +281,7 @@ void setup() {
     rtd[i]->setWires(0);
 #endif
   }
-#endif /* USE_RTD */
+#endif /* ENABLE_RTD */
 }
 
 void loop() {
@@ -309,7 +309,7 @@ String oneWireAddressToString(byte addr[]) {
 }
 
 void searchOnewire() {
-#ifdef USE_ONEWIRE
+#ifdef ENABLE_ONEWIRE
   for (byte i = 0; i < sizeof(oneWirePins); i++) {
     byte newAddr[8];
     oneWire[i]->reset_search();
@@ -360,11 +360,11 @@ void searchOnewire() {
     }
     dallas[i]->setResolution(ONEWIRE_RESOLUTION);
   }
-#endif /* USE_ONEWIRE */
+#endif /* ENABLE_ONEWIRE */
 }
 
 void readOnewire() {
-#ifdef USE_ONEWIRE
+#ifdef ENABLE_ONEWIRE
   if (!oneWireTimer.isOver()) {
     return;
   }
@@ -485,11 +485,11 @@ void readOnewire() {
     oneWire[i]->reset();
   }
   oneWireTimer.sleep(ONEWIRE_CYCLE);
-#endif /* USE_ONEWIRE */
+#endif /* ENABLE_ONEWIRE */
 }
 
 void readDht() {
-#ifdef USE_DHT
+#ifdef ENABLE_DHT
   if (!dhtTimer.isOver()) {
     return;
   }
@@ -551,11 +551,11 @@ void readDht() {
     dhtSensors[i].state = 0;
   }
   dhtTimer.sleep(DHT_CYCLE);
-#endif /* USE_DHT */
+#endif /* ENABLE_DHT */
 }
 
 void readLight() {
-#ifdef USE_LIGHT
+#ifdef ENABLE_LIGHT
   if (!lightTimer.isOver()) {
     return;
   }
@@ -625,11 +625,11 @@ void readLight() {
     lightSensors[i].state = 0;
   }
   lightTimer.sleep(LIGHT_CYCLE);
-#endif /* USE_LIGHT */
+#endif /* ENABLE_LIGHT */
 }
 
 void readRtd() {
-#ifdef USE_RTD
+#ifdef ENABLE_RTD
   if (!rtdTimer.isOver()) {
     return;
   }
@@ -690,7 +690,7 @@ void readRtd() {
     rtdSensors[i].state = 0;
   }
   rtdTimer.sleep(RTD_CYCLE);
-#endif /* USE_RTD */
+#endif /* ENABLE_RTD */
 }
 
 void sendMsg(const String & sendStr) {
