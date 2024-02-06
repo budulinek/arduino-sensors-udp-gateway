@@ -5,13 +5,14 @@
 
 #define ENABLE_DS18X20   // Enable DS18x20 1-wire temperature sensors \
                          // Requires: OneWireNg https://github.com/pstolarz/OneWireNg
-#define ENABLE_BH1750    // Enable BH1750 ambient light sensors \
+// #define ENABLE_BH1750    // Enable BH1750 ambient light sensors \
                          // Requires: <no additional library required>
-#define ENABLE_MAX31865  // Enable MAX31865 RTD temperature sensors \
+// #define ENABLE_MAX31865  // Enable MAX31865 RTD temperature sensors \
                          // Requires: MAX31865_NonBlocking https://github.com/budulinek/MAX31865_NonBlocking
 
-// #define ENABLE_EXTENDED_WEBUI  // Enable extended Web UI (additional items and settings), consumes FLASH memory
-// uncomment ENABLE_EXTENDED_WEBUI if you use only one type of sensors or if you have a board with large FLASH memory (Arduino Mega)
+#define ENABLE_EXTENDED_WEBUI  // Enable extended Web UI (additional items and settings), consumes FLASH memory
+// comment ENABLE_EXTENDED_WEBUI if you want to enable 2 or 3 different types of sensors
+// uncomment ENABLE_EXTENDED_WEBUI if you use only 1 type of sensors or if you have a board with large FLASH memory (Arduino Mega)
 
 // #define ENABLE_DHCP  // Enable DHCP (Auto IP settings), consumes a lot of FLASH memory
 
