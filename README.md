@@ -1,5 +1,5 @@
 # Arduino Sensors UDP Gateway
-Arduino-based sensor gateway gateway with web interface. Collects data data from sensors (see bellow for supported sensor types) and sends them as a JSON-formated UDP message.
+Arduino-based sensor gateway gateway with web interface. Collects data data from sensors (see bellow for supported sensor types) and sends them as a JSON-formatted UDP message.
 
 * [What is it good for?](#what-is-it-good-for)
 * [Core features](#core-features)
@@ -31,7 +31,7 @@ Arduino-based sensor gateway gateway with web interface. Collects data data from
 
 # What is it good for?
 
-Allows you to build a cheap but reliable gateway for collecting sensor data for further processing by home automation system. The gateway was primarily designed for easy and user-friendly integration of various sensors into Loxone home automation system, but can be used for any other system capable of processing JSON-formated UDP messages.
+Allows you to build a cheap but reliable gateway for collecting sensor data for further processing by home automation system. The gateway was primarily designed for easy and user-friendly integration of various sensors into Loxone home automation system, but can be used for any other system capable of processing JSON-formatted UDP messages.
 
 # Core features
 
@@ -55,7 +55,7 @@ The gateway was designed for home automatization. It sits in your electrical dis
 
 ## Human-Readable UDP Output
 
-The gateway regularly polls sensors and sends **UDP messages** at specified reporting intervals. The UDP messages are formated in human-readable **JSON format**. JSON-formated UDP messages can be easily parsed by Loxone miniserver and other systems (incl. Node-RED). Other protocols (such as MQTT) are not supported due to limited resources on Arduino.
+The gateway regularly polls sensors and sends **UDP messages** at specified reporting intervals. The UDP messages are formated in human-readable **JSON format**. JSON-formatted UDP messages can be easily parsed by Loxone miniserver and other systems (incl. Node-RED). Other protocols (such as MQTT) are not supported due to limited resources on Arduino.
 
 Sample JSON output:
 `{"Sensor":"DS18x20","PinType":"1WIRE","Pin":"3","1WireID":"28FFE5A479180142","Value":"22.437","Unit":"°C","Status":"OK"}`
@@ -66,7 +66,7 @@ The gateway was designed for a particular combination of MCU (Arduino) and ether
 
 * **Arduino Nano, Uno or Mega** (and possibly other boards with ATmega chips).<br> This gateway was tailor-made for ATmega chips which have relatively low resources (flash and RAM). <br>ATTENTION: Other MCUs are not supported (and will not be supported). If you have more powerful chips (ESP32), go for universal, generic firmwares (such as [ESPEasy](https://www.letscontrolit.com/wiki/index.php/Main_Page), [ESPHome](https://esphome.io/)).
 * **Ethernet shield with WIZnet chip (W5100, W5200 or W5500)**.<br>The ubiquitous W5100 shield for Uno/Mega is sufficient. If available, I recommend W5500 Ethernet Shield. You can also use combo board MCU + ethernet (such as ATmega328 + W5500 board from Keyestudio).<br>ATTENTION: Ethernet shields with ENC28J60 chip will not work !!!
-* **External power supply**.<br>All sensors supported by the gateway are powered by 5V. Use regulated 5V external power supply for both the Arduino (+ the ethernet shield) and your sensors.<br>ATTENTION: By using the 5V pin, you are bypassing Arduino's built-in voltage regulator and reverse-polarity protection curcuit. Make sure your external power supply does not exceed 5,5V !!!
+* **External power supply**.<br>All sensors supported by the gateway are powered by 5V. Use regulated 5V external power supply for both the Arduino (+ the ethernet shield) and your sensors.<br>ATTENTION: By using the 5V pin, you are bypassing Arduino's built-in voltage regulator and reverse-polarity protection circuit. Make sure your external power supply does not exceed 5,5V !!!
 * **DIN Rail Terminal Block For Arduino**. If you want to place your gateway in your electrical distribution enclosure, get yourself a DIN rail terminal block for Arduino. Standard UTP cables are sufficient for wiring your sensors to the gateway.
 
 I highly recommend using combo board (ATmega328 + W5500 on one board) or a pin-compatible Arduino Ethernet Shield. If you use non-standard ethernet board, you need to connect it manually:
@@ -84,7 +84,7 @@ MISO <-> 12<br>
 SCK <-> 13<br>
 
 * The ethernet shield uses the SPI bus (11, 12, 13 on Arduino Uno / Nano). Pin 10 is the ethernet shield's unique chip select.
-* We also use pin 7 for reseting the ethernet shield (HW modification of the shield is needed for this to work).
+* We also use pin 7 for resetting the ethernet shield (HW modification of the shield is needed for this to work).
 * The SPI bus (pins 11, 12, 13) is shared with SPI sensors.
 
 
@@ -94,7 +94,7 @@ SCK <-> 13<br>
 2. Pre-compile configuration in advanced_settings.h:
   * Enable support for selected sensors types (ENABLE_DS18X20, ENABLE_BH1750, etc.)
   * If you only have 1 sensor type enabled, feel free to enable extended Web UI (ENABLE_EXTENDED_WEBUI).
-  * Optionally, you can adjust default factory settings (setttings with DEFAULT in their name can be later changed via web interface) or change advanced settings (can only be changed before compilation).
+  * Optionally, you can adjust default factory settings (settings with DEFAULT in their name can be later changed via web interface) or change advanced settings (can only be changed before compilation).
 3. Download all required libraries. The program uses the following external libraries (both are available in Arduino IDE's "library manager"):
  - StreamLib (https://github.com/jandrassy/StreamLib)
  - OneWireNg (https://github.com/pstolarz/OneWireNg)
@@ -114,7 +114,7 @@ SCK <-> 13<br>
 
 **EEPROM Health**. Keeps track of EEPROM write cycles (this counter is persistent, never cleared during factory resets). Replace your Arduino once you reach 100 000 write cycles (with 6 hours EEPROM_INTERVAL you have more than 50 years lifespan).
 
-**Ethernet Sockets**. Max number of usable sockets. See Limitations bellow. One socket is reserved for Modbus UDP, remaining sockets are shared between Modbus TCP and WebUI.
+**Ethernet Sockets**. Max number of usable sockets.
 
 **Ethernet Chip**. Wiznet chip on the ethernet shield.
 
@@ -125,7 +125,7 @@ SCK <-> 13<br>
 
 **Clear**. Clears the list of sensors on the **Sensor Status** page. The list of sensors is stored in Arduino's EEPROM, so use the **Clear** button sparingly in order to prevent EEPROM wear. Connected sensors are detected and added to the list automatically.
 
-**Sensors List**. List of sensors detected by the gateway. Each sensor is represented by a single line in the list. Columns may vary depending on sensor types enabled during compile. Column labels and values displayed on the Sensor Status page correspond to **JSON keys and values** sent via UDP message. The Sensors List is **refreshed every 2 seconds** (through Javascript in the background). Therefore, changes in measurement values or sensor status do not show up immediatelly but with a delay.
+**Sensors List**. List of sensors detected by the gateway. Each sensor is represented by a single line in the list. Columns may vary depending on sensor types enabled during compile. Column labels and values displayed on the Sensor Status page correspond to **JSON keys and values** sent via UDP message. The Sensors List is **refreshed every 2 seconds** (through JavaScript in the background). Therefore, changes in measurement values or sensor status do not show up immediately but with a delay.
 
 * **Sensor**. Type of sensor.
 * **PinType**. Type of pin used to identify the sensor:
@@ -139,7 +139,7 @@ SCK <-> 13<br>
 * **Unit**. Unit of measurement.
 * **Status**. Connection status of the sensor:
   - **OK**. The sensor responded to a request sent by the gateway. UDP message was sent at the specified reporting interval.
-  - **OKish**. Recoverable communication error. Communication error has occured between the gateway and the sensor, but the sensor successfully responded to an immediate repeated request. UDP message was sent at the specified reporting interval.
+  - **OKish**. Recoverable communication error. Communication error has occurred between the gateway and the sensor, but the sensor successfully responded to an immediate repeated request. UDP message was sent at the specified reporting interval.
   - **Wait**. The gateway is waiting for a response from the sensor. Response time (and response timeout) depends on the sensor type. For example, temperature conversion on 1-wire temperature sensors can take up to 750ms. Sensors are polled asynchronously. The code is non-blocking and timeouts do not block other functions of the gateway.
   - **Error**. The sensor failed to respond to 10 repeated requests in a row (see MAX_ATTEMPTS in advanced_settings.h). Possible causes are 1) serious communication issues between the gateway and the sensor (faulty wires) or 2) faulty sensor. If an error occurs, no UDP message is sent (use timeout in Loxone to detect errors). In case you have permanently disconnected the sensor, use **Clear** button to remove the sensor(s) from the sensor list.
 
@@ -196,9 +196,9 @@ SCK <-> 13<br>
 
 <img src="pics/fritzing_DS18x20.png" alt="fritzing_DS18x20" style="zoom:100%;" />
 
-VCC <-> 5V
-GND <-> GND
-DATA <-> Any available pin
+VCC <-> 5V<br>
+GND <-> GND<br>
+DATA <-> Any available pin<br>
 
 * Available pin (Uno / Nano) = any **digital** or **analog** pin except:
   -  7, 10 (reserved for ethernet RST and CS)
@@ -206,7 +206,7 @@ DATA <-> Any available pin
   -  A4, A5 (if you enable I2C sensors, these pins will be reserved for the I2C bus)
   -  A6, A7 (on Nano, these are exclusively analog pins)
 * Multiple sensors can share the same 1-wire bus (10 and probably even more sensors can be connected to the same pin)
-* According to specs, 4k7 Ohm pullup resistor is required between 1-wire bus and Vcc. In practice, weaker resistor often works better so I recommend 5k potentiometer + 1k resistor. Adjust the potentiometer until all sensors connected to the bus are detected.
+* According to specs, 4k7 Ohm pull-up resistor is required between 1-wire bus and Vcc. In practice, weaker resistor often works better so I recommend 5k potentiometer + 1k resistor. Adjust the potentiometer until all sensors connected to the bus are detected.
 * Due to limited RAM on Arduino, the total number of DS18x20 sensors on all buses is capped at 30 (see OW_MAX_SENSORS in advanced_settings.h).
 * Individual sensors can be identified by unique 64-bit **1WireID** (displayed on Sensor Status page and send in the JSON-formatted UDP message).
 
@@ -234,11 +234,11 @@ DATA <-> Any available pin
 
 <img src="pics/fritzing_BH1750.png" alt="fritzing_BH1750" style="zoom:100%;" />
 
-VCC <-> 5V
-GND <-> GND
-SDA <-> A4
-SCL <-> A5
-ADDR <-> Any available pin
+VCC <-> 5V<br>
+GND <-> GND<br>
+SDA <-> A4<br>
+SCL <-> A5<br>
+ADDR <-> Any available pin<br>
 
 * Available pin (Uno / Nano) = any **digital** or **analog** pin except:
   -  7, 10 (reserved for ethernet RST and CS)
@@ -273,12 +273,12 @@ ADDR <-> Any available pin
 
 <img src="pics/fritzing_MAX31865.png" alt="fritzing_MAX31865" style="zoom:100%;" />
 
-VCC <-> 5V
-GND <-> GND
-MOSI (SDI) <-> 11
-MISO (SDO) <-> 12
-SCK (CLK) <-> 13
-CS <-> Any available pin
+VCC <-> 5V<br>
+GND <-> GND<br>
+MOSI (SDI) <-> 11<br>
+MISO (SDO) <-> 12<br>
+SCK (CLK) <-> 13<br>
+CS <-> Any available pin<br>
 
 * Available pin (Uno / Nano) = any **digital** or **analog** pin except:
   -  7, 10 (reserved for ethernet RST and CS)
@@ -306,7 +306,7 @@ UDP communication is connectionless (no handshakes or acknowledgements of delive
 
 ## Loxone
 
-In Loxone Config open the UDP Monitor and you will see JSON-formated UDP messages arriving. Example of a UDP message from the MAX31865 sensor (RTD probe):
+In Loxone Config open the UDP Monitor and you will see JSON-formatted UDP messages arriving. Example of a UDP message from the MAX31865 sensor (RTD probe):
 
 `{"Sensor":"MAX31865","PinType":"CS","Pin":"6","Value":"22.521","Unit":"\xC2\xB0C","Status":"OK"}`
 
@@ -323,7 +323,7 @@ I recommend using the search pattern `\iText\i` when parsing JSON-formatted mess
 
 You can also configure validation:
 * **Monitor validation**. Enable. You will receive notification in case of an error.
-* **Receive timeout**. Set a bit higher than Max Reporting Interval configured on the gateway (see settings for the sensor). If timeout is deteceted by Loxone, you will now that some hard irrecoverable error occured on the sensor or gateway (or on wires inbetween).
+* **Receive timeout**. Set a bit higher than Max Reporting Interval configured on the gateway (see settings for the sensor). If timeout is detected by Loxone, you will now that some hard irrecoverable error occurred (faulty sensor, gateway or wires).
 * **Value on timeout**. Retain last value.
 
 ## Node-RED
