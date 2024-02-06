@@ -2,16 +2,29 @@
 Arduino-based sensor gateway gateway with web interface. Collects data data from sensors (see bellow for supported sensor types) and sends them as a JSON-formated UDP message.
 
 * [What is it good for?](#what-is-it-good-for)
-* [Technical specifications](#technical-specifications)
+* [Core features](#core-features)
+  - [Flexible and Scalable](#flexible-and-scalable)
+  - [Automatic Sensor Detection](#automatic-sensor-detection)
+  - [Easy Configuration via WebUI](#easy-configuration-via-webui)
+  - [Reliable Data Collection](#reliable-data-collection)
+  - [Human-Readable UDP Output](#human-readable-udp-output)
 * [Hardware](#hardware)
 * [Firmware](#firmware)
-* [Settings](#settings)
+* [Common Settings](#common-settings)
   - [System Info](#system-info)
-  - [Modbus Status](#modbus-status)
+  - [Sensor Status](#sensor-status)
   - [IP Settings](#ip-settings)
   - [TCP/UDP Settings](#tcpudp-settings)
-  - [RTU Settings](#rtu-settings)
   - [Tools](#tools)
+* [DS18x20 Sensors (1-Wire)](#ds18x20-sensors-1-wire)
+  - [Hardware](#hardware-1)
+  - [DS18x20 Settings](#ds18x20-settings)
+* [BH1750 Sensors (I2C)](#integration)
+  - [Hardware](#hardware-2)
+  - [BH1750 Settings](#bh1750-settings)
+* [MAX31865 Sensors (SPI)](#max31865-sensors-spi)
+  - [Hardware](#hardware-3)
+  - [MAX31865 Settings](#max31865-settings)
 * [Integration](#integration)
   - [Loxone](#loxone)
   - [Node-RED](#node-red)
@@ -62,13 +75,13 @@ I highly recommend using combo board (ATmega328 + W5500 on one board) or a pin-c
 
 <img src="pics/fritzing_ethernet.png" alt="fritzing_ethernet" style="zoom:100%;" />
 
-VCC <-> 5V
-GND <-> GND
-RST <-> 7
-CS <-> 10
-MOSI <-> 11
-MISO <-> 12
-SCK <-> 13
+VCC <-> 5V<br>
+GND <-> GND<br>
+RST <-> 7<br>
+CS <-> 10<br>
+MOSI <-> 11<br>
+MISO <-> 12<br>
+SCK <-> 13<br>
 
 * The ethernet shield uses the SPI bus (11, 12, 13 on Arduino Uno / Nano). Pin 10 is the ethernet shield's unique chip select.
 * We also use pin 7 for reseting the ethernet shield (HW modification of the shield is needed for this to work).
