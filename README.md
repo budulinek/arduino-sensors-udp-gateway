@@ -73,7 +73,7 @@ I highly recommend using combo board (ATmega328 + W5500 on one board) or a pin-c
 
 **Ethernet Shield Wiring**:
 
-<img src="pics/fritzing_ethernet.png" alt="fritzing_ethernet" style="zoom:50%;" />
+<img src="pics/fritzing_ethernet.png" alt="fritzing_ethernet" style="zoom:100%;" />
 
 VCC <-> 5V<br>
 GND <-> GND<br>
@@ -194,7 +194,7 @@ SCK <-> 13<br>
 
 **Wiring**:
 
-<img src="pics/fritzing_DS18x20.png" alt="fritzing_DS18x20" style="zoom:50%;" />
+<img src="pics/fritzing_DS18x20.png" alt="fritzing_DS18x20" style="zoom:100%;" />
 
 VCC <-> 5V<br>
 GND <-> GND<br>
@@ -232,7 +232,7 @@ DATA <-> Any available pin<br>
 
 **Wiring**:
 
-<img src="pics/fritzing_BH1750.png" alt="fritzing_BH1750" style="zoom:50%;" />
+<img src="pics/fritzing_BH1750.png" alt="fritzing_BH1750" style="zoom:100%;" />
 
 VCC <-> 5V<br>
 GND <-> GND<br>
@@ -271,7 +271,7 @@ ADDR <-> Any available pin<br>
 
 **Wiring**:
 
-<img src="pics/fritzing_MAX31865.png" alt="fritzing_MAX31865" style="zoom:50%;" />
+<img src="pics/fritzing_MAX31865.png" alt="fritzing_MAX31865" style="zoom:100%;" />
 
 VCC <-> 5V<br>
 GND <-> GND<br>
