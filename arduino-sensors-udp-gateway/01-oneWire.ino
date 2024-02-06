@@ -1,180 +1,253 @@
-#ifdef ENABLE_ONEWIRE
 
 #if (CONFIG_MAX_SEARCH_FILTERS > 0)
 static_assert(CONFIG_MAX_SEARCH_FILTERS >= DSTherm::SUPPORTED_SLAVES_NUM,
               "CONFIG_MAX_SEARCH_FILTERS too small");
 #endif
 
-const bool PARASITE_POWER_ARG = false;  // parasite power is not supported by this sketch
-
-Timer oneWireTimer;  // timer to delay writing statistics to EEPROM
+#define PARASITE_POWER_ARG false  // parasite power is not supported by this sketch
 
 typedef struct {
-  Placeholder<OneWireNg_CurrentPlatform> wire;
-  Timer minTimer;
-  Timer maxTimer;
+  Timer timerMin;
+  Timer timerMax;
   byte state;
-} owBus_t;
+  byte retryCnt;  // number of attempts to read
+  int32_t oldVal;
+} pin_t;
 
-owBus_t owBuses[OW_MAX_BUSES];
+pin_t pins[NUM_DIGITAL_PINS];
 
+// flags for pin.state
+#define FORCE_REPORT B10000000  // Force report when max interval is over
+#define STATE_MASK B00000111
+
+// flags for owSensors.retryCnt and pins.retryCnt
+#define RESULT_SUCCESS B01000000
+#define RESULT_SUCCESS_RETRY B00100000
+
+#ifdef ENABLE_DS18X20
+Placeholder<OneWireNg_CurrentPlatform> ow;
 typedef struct {
   int32_t oldVal;
   byte retryCnt;  // number of attempts to read
 } owSensor_t;
-
 owSensor_t owSensors[OW_MAX_SENSORS];
+#endif /* ENABLE_DS18X20 */
 
-void startOneWire(const byte i) {
-  if (data.config.owPins[i] == NUM_DIGITAL_PINS) return;
-  new (&owBuses[i].wire) OneWireNg_CurrentPlatform(data.config.owPins[i], false);
-  DSTherm drv(owBuses[i].wire);
-#if (CONFIG_MAX_SEARCH_FILTERS > 0)
-  drv.filterSupportedSlaves();
-#endif
-  /*
-     * Set common resolution for all sensors.
-     * Th, Tl (high/low alarm triggers) are set to 0.
-     */
-  drv.writeScratchpadAll(0, 0, OW_RESOLUTION);
+const byte BH1750_ADDRESS_H = 0x5C;  // Commands sent via Wire (I2C) will be processed by a sensor with address pin set to HIGH
+#ifdef ENABLE_BH1750
+const byte BH1750_POWER_UP = 0x01;
+enum resolution : byte {
+  BH1750_RES_HIGH = 0x10,
+  BH1750_RES_HIGH2 = 0x11,
+  BH1750_RES_LOW = 0x13,
+};
+#endif /* ENABLE_BH1750 */
 
-  /*
-     * The configuration above is stored in volatile sensors scratchpad
-     * memory and will be lost after power unplug. Therefore store the
-     * configuration permanently in sensors EEPROM.
-     */
-  drv.copyScratchpadAll(PARASITE_POWER_ARG);
+#ifdef ENABLE_MAX31865
+Placeholder<MAX31865> rtd;
+#endif /* ENABLE_MAX31865 */
 
-  // searchOneWire(i);
+void searchPin(const byte pin) {
+
+  // detect 1-wire buses
+#ifdef ENABLE_DS18X20
+  searchPinOw(pin);
+#endif /* ENABLE_DS18X20 */
+
+// detect MAX31865 sensors
+#ifdef ENABLE_MAX31865
+  setAllPins(OUTPUT, HIGH);
+  // if (setupRun) delay(10);
+  new (&rtd) MAX31865(pin);
+  rtd->begin(MAX31865::RTD_2WIRE, MAX31865::FILTER_50HZ);
+  if (rtd->getWires() == MAX31865::RTD_2WIRE && rtd->getFilter() == MAX31865::FILTER_50HZ) {  // new sensor found
+    data.pinSensor[pin] = SENSOR_RTD;
+    updateEeprom();
+    // return;
+  }
+#endif /* ENABLE_MAX31865 */
+
+  // detect light sensors
+#ifdef ENABLE_BH1750
+  setAllPins(OUTPUT, LOW);
+  digitalWrite(pin, HIGH);  // Address to high
+  // if (setupRun) delay(10);
+  byte error = 1;
+  // I2CWrite(BH1750_POWER_UP);  // * "Power On" Command is possible to omit.
+  error = I2CWrite(BH1750_RESOLUTION);
+  digitalWrite(pin, LOW);
+  if (error == 0) {  // new sensor found
+    data.pinSensor[pin] = SENSOR_LIGHT;
+    updateEeprom();
+  }
+#endif /* ENABLE_BH1750 */
+  setAllPins(INPUT, LOW);
 }
 
-void clearOneWire(const byte i) {
-  // if (data.config.owPins[i] == NUM_DIGITAL_PINS) return; // clear anyway
-  for (byte j = 0; j < OW_MAX_SENSORS; j++) {
-    if (data.sensors.owBus[j] == i) {
-      memset(&owSensors[j], 0, sizeof(owSensors[j]));                  // delete all sensors on the bus
-      memset(&data.sensors.owId[j], 0, sizeof(data.sensors.owId[j]));  // delete all sensors on the bus
-      data.sensors.owBus[j] = OW_MAX_SENSORS;                          // initial vaue is OW_MAX_SENSORS
-    }
+void setAllPins(const byte mode, const byte val) {
+  for (byte i = 0; i < NUM_DIGITAL_PINS; i++) {
+    if (isReserved(i)) continue;                                          // ignore reserved pins
+    if (setupRun == false && data.pinSensor[i] != SENSOR_NONE) continue;  // ignore used pins
+    pinMode(i, mode);
+    digitalWrite(i, val);
   }
-  owBuses[i].maxTimer.sleep(0);  // reset timers
-  owBuses[i].minTimer.sleep(0);
 }
 
 #define SENSORS_MEM_FULL -1   // oneWireSensors[] memory full
 #define SENSORS_MEM_FOUND -2  // sensor already stored in oneWireSensors[] memory
-void searchOneWire(const byte i) {
-  if (data.config.owPins[i] == NUM_DIGITAL_PINS) return;
-  owBuses[i].wire->searchReset();
-  for (const auto& newId : *owBuses[i].wire) {
+#ifdef ENABLE_DS18X20
+bool searchPinOw(const byte pin) {
+  new (&ow) OneWireNg_CurrentPlatform(pin, false);
+  DSTherm drv(ow);
+  ow->searchReset();
+  for (const auto& newId : *ow) {
     // check if sensor type is supported by libraries we use
     if (DSTherm::getFamilyName(newId) == NULL) continue;  // not supported
     int16_t sensorNdx = SENSORS_MEM_FULL;
     for (byte j = OW_MAX_SENSORS; j--;) {  // loop all slots in memory
-      if (data.sensors.owId[j][0] == 0) {
+      if (data.ow.ids[j][0] == 0) {
         sensorNdx = j;  // empty slot found, record its index
         continue;       //
       }
       bool match = true;
       for (byte k = 0; k < 8; k++) {
-        if (newId[k] != data.sensors.owId[j][k]) {  // slot with different ID
+        if (newId[k] != data.ow.ids[j][k]) {  // slot with different ID
           match = false;
           break;
         }
       }
+      if (data.ow.pins[j] != pin) match = false;
       if (match) {
         sensorNdx = SENSORS_MEM_FOUND;  // slot with same ID
-        if (data.sensors.owBus[j] != i) {
-          data.sensors.owBus[j] = i;  // update pin in case the sensor only moved to another bus
-          updateEeprom();
-        }
         break;
       }
     }
     if (sensorNdx == SENSORS_MEM_FULL) {
       // TODO: error sensor not found and memory full
-    } else if (sensorNdx >= 0) {     // empty slot found
-                                     // TODO message new sensor
-      DSTherm drv(owBuses[i].wire);  // new sensor, set common resolution
-      drv.writeScratchpad(newId, 0, 0, OW_RESOLUTION);
+    } else if (sensorNdx >= 0) {                        // empty slot found
+                                                        // TODO message new sensor
+      drv.writeScratchpad(newId, 0, 0, OW_RESOLUTION);  // Th, Tl (high/low alarm triggers) are set to 0, set resolution
       drv.copyScratchpad(newId, PARASITE_POWER_ARG);
       for (byte l = 0; l < 8; l++) {
-        data.sensors.owId[sensorNdx][l] = newId[l];
+        data.ow.ids[sensorNdx][l] = newId[l];
       }
-      data.sensors.owBus[sensorNdx] = i;
+      data.ow.pins[sensorNdx] = pin;
+      data.pinSensor[pin] = SENSOR_1WIRE;
       updateEeprom();
     }
   }
 }
+#endif /* ENABLE_DS18X20 */
 
-void readOnewire(const byte i) {
-  if (data.config.owPins[i] == NUM_DIGITAL_PINS) return;
-  if (owBuses[i].maxTimer.isOver()) {
-    for (byte j = 0; j < OW_MAX_SENSORS; j++) {
-      if (data.sensors.owBus[j] == i) {
-        owSensors[j].retryCnt = owSensors[j].retryCnt | FORCE_REPORT;  // Add FORCE_REPORT flag for all sensors on the bus
-      }
-    }
-    owBuses[i].maxTimer.sleep((data.config.owIntMax - data.config.owIntMin) * 1000UL);
+void readPin(const byte pin) {
+  if (pins[pin].timerMax.isOver()) {
+    pins[pin].state |= FORCE_REPORT;
+    pins[pin].timerMax.sleep((data.config.intervalMax[data.pinSensor[pin]] - data.config.intervalMin[data.pinSensor[pin]]) * 1000UL);
   }
-  if (owBuses[i].minTimer.isOver() == false) {
+  if (pins[pin].timerMin.isOver() == false || isReserved(pin)) {
     return;
   }
-  DSTherm drv(owBuses[i].wire);
-  switch (owBuses[i].state) {
-    case 0:  // STATE_IDLE: Initialize conversion for all dallas temp sensors on a bus
-      searchOneWire(i);
-      drv.convertTempAll(0, PARASITE_POWER_ARG);
-      for (byte j = 0; j < OW_MAX_SENSORS; j++) {
-        if (data.sensors.owBus[j] == i) {
-          // keep FORCE_REPORT flag and clear RESULT_SUCCESS and RESULT_SUCCESS_RETRY flags
-          if (owSensors[j].retryCnt & RETRY_MASK == MAX_ATTEMPTS) {
-            owSensors[j].retryCnt = (MAX_ATTEMPTS - 1) | (owSensors[j].retryCnt & FORCE_REPORT);  // allow only one attempt for disconnected sensors
-          } else {
-            owSensors[j].retryCnt = (owSensors[j].retryCnt & FORCE_REPORT) | B00000000;
-          }
-        }
+  switch (data.pinSensor[pin]) {
+    case SENSOR_NONE:
+      {
+        sleepPin(pin);
+        searchPin(pin);
       }
-      owBuses[i].state++;
-      owBuses[i].minTimer.sleep(drv.getConversionTime(OW_RESOLUTION));
       break;
-    case 1:  // STATE_CONVERTING
-      if (owBuses[i].wire->readBit() == 1 || owBuses[i].minTimer.isOver()) {
-        // conversion on the bus finished, read sensors one by one
-        Placeholder<DSTherm::Scratchpad> scrpd;
-        bool finished = true;
+#ifdef ENABLE_DS18X20
+    case SENSOR_1WIRE:
+      {
+        readOneWire(pin);
+      }
+      break;
+#endif /* ENABLE_DS18X20 */
+#ifdef ENABLE_BH1750
+    case SENSOR_LIGHT:
+      {
+        readLight(pin);
+      }
+      break;
+#endif /* ENABLE_BH1750 */
+#ifdef ENABLE_MAX31865
+    case SENSOR_RTD:
+      {
+        // readRtd(pin);
+        readLight(pin);
+      }
+      break;
+#endif /* ENABLE_MAX31865 */
+    default:
+      break;
+  }
+}
+
+#ifdef ENABLE_DS18X20
+void readOneWire(const byte pin) {
+  switch (pins[pin].state & STATE_MASK) {
+    case 0:  // Initialize conversion for all dallas temp sensors on a bus
+      {
+        searchPinOw(pin);
+        new (&ow) OneWireNg_CurrentPlatform(pin, false);
+        DSTherm drv(ow);
+        drv.convertTempAll(0, PARASITE_POWER_ARG);
         for (byte j = 0; j < OW_MAX_SENSORS; j++) {
-          if (data.sensors.owBus[j] != i                                // skip empty slots and sensors from other buses
-              || (owSensors[j].retryCnt & RESULT_SUCCESS)               // skip successful sensors
-              || (owSensors[j].retryCnt & RETRY_MASK == MAX_ATTEMPTS))  // skip sensors with error
-            continue;
-          owSensors[j].retryCnt++;  // safe to do without mask
-          byte result = drv.readScratchpad(data.sensors.owId[j], scrpd);
-          bool empty = true;  // check if scratchpad is empty
-          const uint8_t* scrpd_raw = scrpd->getRaw();
-          for (byte k = 0; k < DSTherm::Scratchpad::LENGTH; k++) {
-            if (scrpd_raw[k] != 0) empty = false;
-          }
-          if (result == OneWireNg::EC_SUCCESS && empty == false) {
-            int32_t val = scrpd->getTemp();
-            if ((abs(val - owSensors[j].oldVal) >= (data.config.owChange * 100UL)) || (owSensors[j].retryCnt & FORCE_REPORT)) {
-              owSensors[j].oldVal = val;
-              sendUdp(TYPE_1WIRE, j);
+          if (data.ow.pins[j] == pin) {
+            // clears RESULT_SUCCESS and RESULT_SUCCESS_RETRY flags
+            if (owSensors[j].retryCnt == MAX_ATTEMPTS) {
+              owSensors[j].retryCnt = MAX_ATTEMPTS - 1;  // allow only one attempt for disconnected sensors
+            } else {
+              owSensors[j].retryCnt = 0;
             }
-            owSensors[j].retryCnt = RESULT_SUCCESS;  // clears FORCE_REPORT flag and number of retries
-            if ((owSensors[j].retryCnt & RETRY_MASK) > 1) {
-              owSensors[j].retryCnt = RESULT_SUCCESS_RETRY;  // clears FORCE_REPORT flag and number of retries
-            }
-          } else if ((owSensors[j].retryCnt & RETRY_MASK) < MAX_ATTEMPTS) {
-            // TODO: msg soft error
-            drv.convertTemp(data.sensors.owId[j], 0, PARASITE_POWER_ARG);
-            owBuses[i].minTimer.sleep(drv.getConversionTime(OW_RESOLUTION));
-            finished = false;
           }
         }
-        if (finished) {
-          owBuses[i].state = STATE_IDLE;
-          owBuses[i].minTimer.sleep(data.config.owIntMin * 1000UL);
+        pins[pin].timerMin.sleep(drv.getConversionTime(OW_RESOLUTION));
+        pins[pin].state++;
+      }
+      break;
+    case 1:
+      {
+        new (&ow) OneWireNg_CurrentPlatform(pin, false);
+        DSTherm drv(ow);
+        if (ow->readBit() == 1 || pins[pin].timerMin.isOver()) {
+          // conversion on the bus finished, read sensors one by one
+          Placeholder<DSTherm::Scratchpad> scrpd;
+          bool finished = true;
+          for (byte j = 0; j < OW_MAX_SENSORS; j++) {
+            if (data.ow.pins[j] != pin                       // skip empty slots and sensors from other buses
+                || (owSensors[j].retryCnt >= MAX_ATTEMPTS))  // skip sensors with error and successful sensors
+              continue;
+            owSensors[j].retryCnt++;
+            byte result = drv.readScratchpad(data.ow.ids[j], scrpd);
+            bool empty = true;  // check if scratchpad is empty
+            int32_t val;
+            const uint8_t* scrpd_raw = scrpd->getRaw();
+            for (byte k = 0; k < DSTherm::Scratchpad::LENGTH; k++) {
+              if (scrpd_raw[k] != 0) {
+                empty = false;
+                val = scrpd->getTemp();
+              }
+            }
+            if (result == OneWireNg::EC_SUCCESS && empty == false && val != 85000) {
+              // pins[pin].state &= ~FORCE_REPORT;          // clear FORCE_REPORT flag
+              if (owSensors[j].retryCnt == 1) {
+                owSensors[j].retryCnt = RESULT_SUCCESS;  // clears number of retries
+              } else {
+                owSensors[j].retryCnt = RESULT_SUCCESS_RETRY;  // clears number of retries
+              }
+              if ((abs(val - owSensors[j].oldVal) >= (data.config.change[SENSOR_1WIRE] * 100L)) || (pins[pin].state & FORCE_REPORT)) {
+                owSensors[j].oldVal = val;
+                sendUdp(pin, j);
+              }
+            } else {
+              // TODO: msg soft error
+              drv.convertTemp(data.ow.ids[j], 0, PARASITE_POWER_ARG);
+              pins[pin].timerMin.sleep(drv.getConversionTime(OW_RESOLUTION));
+              finished = false;
+            }
+          }
+          if (finished) {
+            sleepPin(pin);
+          }
         }
       }
       break;
@@ -182,5 +255,24 @@ void readOnewire(const byte i) {
       break;
   }
 }
+#endif /* ENABLE_DS18X20 */
 
-#endif /* ENABLE_ONEWIRE */
+// sleep pin (depending on pinType) and set pin state to 0
+void sleepPin(const byte pin) {
+  pins[pin].state = 0;  // clear FORCE_REPORT flag
+  pins[pin].timerMin.sleep(data.config.intervalMin[data.pinSensor[pin]] * 1000UL);
+}
+
+// returns true if pin is reserved for Wire (I2C), SPI or Ethernet connections
+bool isReserved(const byte pin) {
+  // SPI pins used by the ethernet shield
+  if (pin == PIN_SPI_SS || pin == PIN_SPI_MOSI || pin == PIN_SPI_MISO || pin == PIN_SPI_SCK || pin == ETH_RESET_PIN
+#ifdef ENABLE_BH1750
+      || pin == PIN_WIRE_SDA || pin == PIN_WIRE_SCL
+#endif /* ENABLE_BH1750 */
+  ) {
+    return true;
+  } else {
+    return false;
+  }
+}

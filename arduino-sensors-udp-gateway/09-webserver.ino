@@ -1,24 +1,3 @@
-/* *******************************************************************
-   Webserver functions
-
-   recvWeb()
-   - receives GET requests for web pages
-   - receives POST data from web forms
-   - calls processPost
-   - sends web pages, for simplicity, all web pages should are numbered (1.htm, 2.htm, ...), the page number is passed to sendPage() function
-   - executes actions (such as ethernet restart, reboot) during "please wait" web page
-
-   processPost()
-   - processes POST data from forms and buttons
-   - updates data.config (in RAM)
-   - saves config into EEPROM
-   - executes actions which do not require webserver restart
-
-   strToByte(), hex()
-   - helper functions for parsing and writing hex data
-
-   ***************************************************************** */
-
 const byte URI_SIZE = 24;   // a smaller buffer for uri
 const byte POST_SIZE = 24;  // a smaller buffer for single post parameter + key
 
@@ -43,12 +22,15 @@ enum page : byte {
   PAGE_STATUS,
   PAGE_IP,
   PAGE_TCP,
-#ifdef ENABLE_ONEWIRE
-  PAGE_OW,
-#endif /* ENABLE_ONEWIRE */
-#ifdef ENABLE_LIGHT
-  PAGE_LIGHT,
-#endif /* ENABLE_LIGHT */
+#ifdef ENABLE_DS18X20
+  PAGE_DS18X20,
+#endif /* ENABLE_DS18X20 */
+#ifdef ENABLE_BH1750
+  PAGE_BH1750,
+#endif /* ENABLE_BH1750 */
+#ifdef ENABLE_MAX31865
+  PAGE_MAX31865,
+#endif /* ENABLE_MAX31865 */
 #ifdef ENABLE_EXTENDED_WEBUI
   PAGE_TOOLS,
 #endif        /* ENABLE_EXTENDED_WEBUI */
@@ -88,32 +70,32 @@ enum post_key : byte {
   POST_REM_IP,
   POST_REM_IP_1,
   POST_REM_IP_2,
-  POST_REM_IP_3,    // remote IP
-  POST_UDP,         // UDP port
-  POST_WEB,         // web UI port
-  POST_OW_INT_MIN,  // 1-wire sensors read cycle
-  POST_OW_INT_MAX,  // 1-wire sensors read cycle
-  POST_OW_CHANGE,
-  POST_OW_BUS,  // First 1-wire bus
-  POST_OW_BUS_L = POST_OW_BUS + OW_MAX_BUSES - 1,
-  POST_LIGHT_INT_MIN,  // 1-wire sensors read cycle
-  POST_LIGHT_INT_MAX,  // 1-wire sensors read cycle
-  POST_LIGHT_CHANGE,
-  POST_LIGHT_PIN,  // First BH1750 address pin
-  POST_LIGHT_PIN_L = POST_LIGHT_PIN + LIGHT_MAX_SENSORS - 1,
+  POST_REM_IP_3,  // remote IP
+  POST_UDP,       // UDP port
+  POST_WEB,       // web UI port
+  POST_INTERVAL_MIN,
+  POST_INTERVAL_MIN_L = POST_INTERVAL_MIN + SENSOR_LAST - 1,
+  POST_INTERVAL_MAX,
+  POST_INTERVAL_MAX_L = POST_INTERVAL_MAX + SENSOR_LAST - 1,
+  POST_CHANGE,
+  POST_CHANGE_L = POST_CHANGE + SENSOR_LAST - 1,
+  POST_RTD_WIRES,
+  POST_RTD_NOMINAL,
+  POST_RTD_REFERENCE,
   POST_ACTION,  // actions on Tools page
   POST_LAST,    // must be last
 };
 
-// Keys for JSON elements, used in: 1) JSON documents, 2) ID of span tags, 3) Javascript.
-enum JSON_type : byte {
-  JSON_NONE,     // reserved for NULL
-  JSON_ONEWIRE,  // List of 1-wire sensors
-  JSON_LIGHT,    // List of light sensors (BH1750)
-  JSON_LAST,     // Must be the very last element in this array
-};
-
-
+/**************************************************************************/
+/*!
+  @brief Receives GET requests for web pages, receives POST data from web forms,
+  calls @ref processPost() function, sends web pages. For simplicity, all web pages
+  should are numbered (1.htm, 2.htm, ...), the page number is passed to 
+  the @ref sendPage() function. Also executes actions (such as ethernet restart,
+  reboot) during "please wait" web page.
+  @param client Ethernet TCP client.
+*/
+/**************************************************************************/
 void recvWeb(EthernetClient &client) {
   char uri[URI_SIZE];  // the requested page
   memset(uri, 0, sizeof(uri));
@@ -187,8 +169,13 @@ void recvWeb(EthernetClient &client) {
   action = ACT_NONE;
 }
 
-// This function stores POST parameter values in data.config.
-// Most changes are saved and applied immediatelly, some changes (IP settings, web server port, reboot) are saved but applied later after "please wait" page is sent.
+/**************************************************************************/
+/*!
+  @brief Processes POST data from forms and buttons, updates data.config (in RAM)
+  and saves config into EEPROM. Executes actions which do not require webserver restart
+  @param client Ethernet TCP client.
+*/
+/**************************************************************************/
 void processPost(EthernetClient &client) {
   while (client.available()) {
     char post[POST_SIZE];
@@ -276,58 +263,43 @@ void processPost(EthernetClient &client) {
           }
         }
         break;
-#ifdef ENABLE_ONEWIRE
-      case POST_OW_INT_MIN:
+      case POST_INTERVAL_MIN ... POST_INTERVAL_MIN_L:
         {
-          data.config.owIntMin = paramValueUint;
-        }
-        break;
-      case POST_OW_INT_MAX:
-        data.config.owIntMax = paramValueUint;
-        break;
-      case POST_OW_CHANGE:
-        data.config.owChange = byte(paramValueUint);
-        break;
-      case POST_OW_BUS ... POST_OW_BUS_L:
-        {
-          owBuses[paramKeyByte - POST_OW_BUS].minTimer.sleep(0);  // reset timers whenever the form on the BH1750 Settings page changes
-          owBuses[paramKeyByte - POST_OW_BUS].maxTimer.sleep(0);
-          byte newVal = byte(paramValueUint);
-          if (data.config.owPins[paramKeyByte - POST_OW_BUS] != newVal && isUsed(newVal) == false) {
-            data.config.owPins[paramKeyByte - POST_OW_BUS] = newVal;
-            clearOneWire(paramKeyByte - POST_OW_BUS);
-            startOneWire(paramKeyByte - POST_OW_BUS);
+          for (byte i = 0; i < NUM_DIGITAL_PINS; i++) {
+            if (data.pinSensor[i] != paramKeyByte - POST_INTERVAL_MIN) continue;
+            pins[i].timerMax.sleep(0);  // reset timers
+            pins[i].timerMin.sleep(0);  // reset timers
           }
+          data.config.intervalMin[paramKeyByte - POST_INTERVAL_MIN] = paramValueUint;
         }
         break;
-#endif /* ENABLE_ONEWIRE */
-
-#ifdef ENABLE_LIGHT
-      case POST_LIGHT_INT_MIN:
+      case POST_INTERVAL_MAX ... POST_INTERVAL_MAX_L:
         {
-          data.config.lightIntMin = paramValueUint;
+          data.config.intervalMax[paramKeyByte - POST_INTERVAL_MAX] = paramValueUint;
         }
         break;
-      case POST_LIGHT_INT_MAX:
-        data.config.lightIntMax = paramValueUint;
-        break;
-      case POST_LIGHT_CHANGE:
-        data.config.lightChange = byte(paramValueUint);
-        break;
-      case POST_LIGHT_PIN ... POST_LIGHT_PIN_L:
+      case POST_CHANGE ... POST_CHANGE_L:
         {
-          light[paramKeyByte - POST_LIGHT_PIN].minTimer.sleep(0);  // reset timers whenever the form on the BH1750 Settings page changes
-          light[paramKeyByte - POST_LIGHT_PIN].maxTimer.sleep(0);
-          byte newVal = byte(paramValueUint);
-          if (data.config.lightPins[paramKeyByte - POST_LIGHT_PIN] != newVal && isUsed(newVal) == false) {
-            data.config.lightPins[paramKeyByte - POST_LIGHT_PIN] = newVal;
-            clearLight(paramKeyByte - POST_LIGHT_PIN);
-            startLight(paramKeyByte - POST_LIGHT_PIN);
-          }
+          data.config.change[paramKeyByte - POST_CHANGE] = paramValueUint;
         }
         break;
-#endif /* ENABLE_LIGHT */
-
+#ifdef ENABLE_MAX31865
+      case POST_RTD_WIRES:
+        {
+          data.config.rtdWires = byte(paramValueUint);
+        }
+        break;
+      case POST_RTD_NOMINAL:
+        {
+          data.config.rtdNominal = paramValueUint;
+        }
+        break;
+      case POST_RTD_REFERENCE:
+        {
+          data.config.rtdReference = paramValueUint;
+        }
+        break;
+#endif /* ENABLE_MAX31865 */
       case POST_ACTION:
         action = action_type(paramValueUint);
         break;
@@ -342,9 +314,6 @@ void processPost(EthernetClient &client) {
 #ifdef ENABLE_EXTENDED_WEBUI
     case ACT_DEFAULT:
       data.config = DEFAULT_CONFIG;
-      // set all pins to "--"
-      memset(data.config.owPins, NUM_DIGITAL_PINS, sizeof(data.config.owPins));
-      memset(data.config.lightPins, NUM_DIGITAL_PINS, sizeof(data.config.lightPins));
       resetSensors();
       break;
     case ACT_MAC:
@@ -359,19 +328,26 @@ void processPost(EthernetClient &client) {
 }
 
 void resetSensors() {
-#ifdef ENABLE_ONEWIRE
-  for (byte i = 0; i < OW_MAX_BUSES; i++) {
-    clearOneWire(i);
+  for (byte i = 0; i < NUM_DIGITAL_PINS; i++) {
+    pins[i].timerMax.sleep(0);  // reset timers
+    pins[i].timerMin.sleep(0);  // reset timers
+    pins[i].oldVal = 0;
   }
-#endif /* ENABLE_ONEWIRE */
-#ifdef ENABLE_LIGHT
-  for (byte i = 0; i < LIGHT_MAX_SENSORS; i++) {
-    clearLight(i);
-  }
-#endif /* ENABLE_LIGHT */
+  memset(data.pinSensor, SENSOR_NONE, sizeof(data.pinSensor));
+  memset(&data.ow, 0, sizeof(data.ow));
+#ifdef ENABLE_DS18X20
+  memset(owSensors, 0, sizeof(owSensors));
+#endif /* ENABLE_DS18X20 */
 }
 
-// takes 2 chars, 1 char + null byte or 1 null byte
+/**************************************************************************/
+/*!
+  @brief Parses string and returns single byte.
+  @param myStr String (2 chars, 1 char + null or 1 null) to be parsed.
+  @return Parsed byte.
+*/
+/**************************************************************************/
+
 byte strToByte(const char myStr[]) {
   if (!myStr) return 0;
   byte x = 0;
@@ -391,10 +367,15 @@ byte strToByte(const char myStr[]) {
   return x;
 }
 
-// from https://github.com/RobTillaart/printHelpers
-char __printbuffer[8];
+char __printbuffer[3];
+/**************************************************************************/
+/*!
+  @brief Converts byte to char string, from https://github.com/RobTillaart/printHelpers
+  @param val Byte to be conferted.
+  @return Char string.
+*/
+/**************************************************************************/
 char *hex(byte val) {
-  memset(__printbuffer, 0, sizeof(__printbuffer));
   char *buffer = __printbuffer;
   byte digits = 2;
   buffer[digits] = '\0';
@@ -403,36 +384,6 @@ char *hex(byte val) {
     val >>= 4;
     digits--;
     buffer[digits] = (v < 10) ? '0' + v : ('A' - 10) + v;
-  }
-  return buffer;
-}
-
-// converts temp (signed long) to temperature
-char *longTemp(int32_t val) {
-  memset(__printbuffer, 0, sizeof(__printbuffer));
-  char *buffer = __printbuffer;
-  char *end;
-  uint16_t decimal = abs(val % 1000);
-  itoa((val / 1000), buffer, 10);
-  end = buffer + strlen(buffer);
-  *end++ = '.';
-  if (decimal < 100) *end++ = '0';
-  if (decimal < 10) *end++ = '0';
-  itoa(decimal, end, 10);
-  return buffer;
-}
-
-// converts pin number
-char *pinName(const byte i) {
-  memset(__printbuffer, 0, sizeof(__printbuffer));
-  char *buffer = __printbuffer;
-  if (i == NUM_DIGITAL_PINS) {
-    memset(buffer, '-', 2);
-  } else if (i >= PIN_A0 && i < PIN_A0 + NUM_ANALOG_INPUTS) {
-    *buffer = 'A';
-    itoa(i - PIN_A0, buffer + 1, 10);
-  } else {
-    itoa(i, buffer, 10);
   }
   return buffer;
 }
