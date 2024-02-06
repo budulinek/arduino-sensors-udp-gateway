@@ -87,7 +87,6 @@ SCK <-> 13<br>
 * We also use pin 7 for resetting the ethernet shield (HW modification of the shield is needed for this to work).
 * The SPI bus (pins 11, 12, 13) is shared with SPI sensors.
 
-
 # Firmware
 
 1. Download this repository (all *.ino files) and open arduino-sensors-udp-gateway.ino in Arduino IDE.
