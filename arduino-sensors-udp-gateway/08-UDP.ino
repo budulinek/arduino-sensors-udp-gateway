@@ -12,7 +12,20 @@
 
 ***************************************************************** */
 
-void sendUdp(const byte TYPE, const byte sensor) {
+// Keys for JSON elements, used in: 1) JSON documents, 2) ID of span tags, 3) Javascript.
+enum COLUMN_t : byte {
+  COLUMN_SENSOR,
+  COLUMN_PINTYPE,
+  COLUMN_PIN,
+  COLUMN_I2C,
+  COLUMN_ID,
+  COLUMN_VALUE,
+  COLUMN_UNIT,
+  COLUMN_STATUS,
+  COLUMN_LAST,  // Must be the very last element in this array
+};
+
+void sendUdp(const byte pin, const byte id) {
 // Send packets according to settings
 #ifdef ENABLE_EXTENDED_WEBUI
   IPAddress remIp = data.config.remoteIp;
@@ -21,30 +34,16 @@ void sendUdp(const byte TYPE, const byte sensor) {
 #else
   Udp.beginPacket({ 255, 255, 255, 255 }, data.config.udpPort);  // enforce UDP broadcast when the setting is not in WebUI
 #endif /* ENABLE_EXTENDED_WEBUI */
-  Udp.print(F("{\"Type\":\""));
-  switch (TYPE) {
-#ifdef ENABLE_ONEWIRE
-    case TYPE_1WIRE:
-      Udp.print(F("DS18x20\",\"Pin\":\""));
-      Udp.print(pinName(data.config.owPins[data.sensors.owBus[sensor]]));
-      Udp.print(F("\",\"Id\":\""));
-      for (byte j = 0; j < 8; j++) {
-        Udp.print(hex(data.sensors.owId[sensor][j]));
-      }
-      Udp.print(F("\",\"Temperature\":"));
-      Udp.print(longTemp(owSensors[sensor].oldVal));
-      break;
-#endif /* ENABLE_ONEWIRE */
-#ifdef ENABLE_LIGHT
-    case TYPE_LIGHT:
-      Udp.print(F("BH1750\",\"Pin\":\""));
-      Udp.print(pinName(data.config.lightPins[sensor]));
-      Udp.print(F("\",\"Illuminance\":"));
-      Udp.print(lightSensors[sensor].oldVal);
-      break;
-#endif /* ENABLE_LIGHT */
-    default:
-      break;
+  Udp.print(F("{"));
+  for (byte column = 0; column < COLUMN_LAST; column++) {
+    if (cell(column, pin, id)[0] != '\0') {
+      if (column > 0) Udp.print(F(","));
+      Udp.print(F("\""));
+      Udp.print((const __FlashStringHelper *)stringColumn(column));
+      Udp.print(F("\":\""));
+      Udp.print(cell(column, pin, id));
+      Udp.print(F("\""));
+    }
   }
   Udp.print(F("}"));
   Udp.endPacket();

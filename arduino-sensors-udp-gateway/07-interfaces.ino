@@ -1,45 +1,10 @@
-/* *******************************************************************
-   Ethernet and interface functions
 
-   startEthernet()
-   - initiates ethernet interface
-   - if enabled, gets IP from DHCP
-   - starts all servers (Modbus TCP, UDP, web server)
-
-   resetFunc()
-   - well... resets Arduino
-
-   maintainDhcp()
-   - maintain DHCP lease
-
-   maintainUptime()
-   - maintains up time in case of millis() overflow
-
-   maintainCounters(), rollover()
-   - synchronizes roll-over of data counters to zero
-
-   resetStats()
-   - resets Modbus stats
-
-   generateMac()
-   - generate random MAC using pseudo random generator (faster and than build-in random())
-
-   manageSockets()
-   - closes sockets which are waiting to be closed or which refuse to close
-   - forwards sockets with data available (webserver or Modbus TCP) for further processing
-   - disconnects (closes) sockets which are too old / idle for too long
-   - opens new sockets if needed (and if available)
-
-   CreateTrulyRandomSeed()
-   - seed pseudorandom generator using  watch dog timer interrupt (works only on AVR)
-   - see https://sites.google.com/site/astudyofentropy/project-definition/timer-jitter-entropy-sources/entropy-library/arduino-random-seed
-
-
-   + preprocessor code for identifying microcontroller board
-
-   ***************************************************************** */
-
-
+/**************************************************************************/
+/*!
+  @brief Initiates ethernet interface, if DHCP enabled, gets IP from DHCP,
+  starts all servers (UDP, web server).
+*/
+/**************************************************************************/
 void startEthernet() {
   if (ETH_RESET_PIN != 0) {
     pinMode(ETH_RESET_PIN, OUTPUT);
@@ -68,8 +33,18 @@ void startEthernet() {
 #endif
 }
 
+/**************************************************************************/
+/*!
+  @brief Resets Arduino (works only on AVR chips).
+*/
+/**************************************************************************/
 void (*resetFunc)(void) = 0;  //declare reset function at address 0
 
+/**************************************************************************/
+/*!
+  @brief Maintains DHCP lease.
+*/
+/**************************************************************************/
 #ifdef ENABLE_DHCP
 void maintainDhcp() {
   if (data.config.enableDhcp && dhcpSuccess == true) {  // only call maintain if initial DHCP request by startEthernet was successfull
@@ -78,9 +53,12 @@ void maintainDhcp() {
 }
 #endif /* ENABLE_DHCP */
 
-
-
-// generate new MAC (bytes 0, 1 and 2 are static, bytes 3, 4 and 5 are generated randomly)
+/**************************************************************************/
+/*!
+  @brief Generate random MAC using pseudo random generator,
+  bytes 0, 1 and 2 are static (MAC_START), bytes 3, 4 and 5 are generated randomly
+*/
+/**************************************************************************/
 void generateMac() {
   // Marsaglia algorithm from https://github.com/RobTillaart/randomHelpers
   seed1 = 36969L * (seed1 & 65535L) + (seed1 >> 16);
@@ -93,26 +71,38 @@ void generateMac() {
   }
 }
 
+/**************************************************************************/
+/*!
+  @brief Write (update) data to Arduino EEPROM.
+*/
+/**************************************************************************/
 void updateEeprom() {
+#ifdef ENABLE_EXTENDED_WEBUI
   eepromTimer.sleep(EEPROM_INTERVAL * 60UL * 60UL * 1000UL);  // EEPROM_INTERVAL is in hours, sleep is in milliseconds!
-  data.eepromWrites++;                                        // we assume that at least some bytes are written to EEPROM during EEPROM.update or EEPROM.put
+#endif
+  data.eepromWrites++;  // we assume that at least some bytes are written to EEPROM during EEPROM.update or EEPROM.put
   EEPROM.put(DATA_START, data);
 }
 
-#if MAX_SOCK_NUM == 8
-uint32_t lastSocketUse[MAX_SOCK_NUM] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-#elif MAX_SOCK_NUM == 4
-uint32_t lastSocketUse[MAX_SOCK_NUM] = { 0, 0, 0, 0 };
-#endif
 
-// from https://github.com/SapientHetero/Ethernet/blob/master/src/socket.cpp
+uint32_t lastSocketUse[MAX_SOCK_NUM];
+byte socketInQueue[MAX_SOCK_NUM];
+/**************************************************************************/
+/*!
+  @brief Closes sockets which are waiting to be closed or which refuse to close,
+  forwards sockets with data available for further processing by the webserver,
+  disconnects (closes) sockets which are too old (idle for too long), opens
+  new sockets if needed (and if available).
+  From https://github.com/SapientHetero/Ethernet/blob/master/src/socket.cpp
+*/
+/**************************************************************************/
 void manageSockets() {
   uint32_t maxAge = 0;         // the 'age' of the socket in a 'disconnectable' state that was last used the longest time ago
   byte oldest = MAX_SOCK_NUM;  // the socket number of the 'oldest' disconnectable socket
   byte webListening = MAX_SOCK_NUM;
   byte dataAvailable = MAX_SOCK_NUM;
   byte socketsAvailable = 0;
-  // SPI.beginTransaction(SPI_ETHERNET_SETTINGS);								// begin SPI transaction
+  SPI.beginTransaction(SPI_ETHERNET_SETTINGS);  // begin SPI transaction
   // look at all the hardware sockets, record and take action based on current states
   for (byte s = 0; s < maxSockNum; s++) {            // for each hardware socket ...
     byte status = W5100.readSnSR(s);                 //  get socket status...
@@ -181,10 +171,15 @@ void manageSockets() {
     disconSocket(oldest);
   }
 
-  // SPI.endTransaction();	// Serves to o release the bus for other devices to access it. Since the ethernet chip is the only device
-  // we do not need SPI.beginTransaction(SPI_ETHERNET_SETTINGS) or SPI.endTransaction()
+  SPI.endTransaction();  // Serves to o release the bus for other devices to access it. Since the ethernet chip is the only device
 }
 
+/**************************************************************************/
+/*!
+  @brief Disconnect or close a socket.
+  @param s Socket number.
+*/
+/**************************************************************************/
 void disconSocket(byte s) {
   if (W5100.readSnSR(s) == SnSR::ESTABLISHED) {
     W5100.execCmdSn(s, Sock_DISCON);  // Sock_DISCON does not close LISTEN sockets
@@ -194,7 +189,13 @@ void disconSocket(byte s) {
   }
 }
 
-// https://sites.google.com/site/astudyofentropy/project-definition/timer-jitter-entropy-sources/entropy-library/arduino-random-seed
+
+/**************************************************************************/
+/*!
+  @brief Seed pseudorandom generator using  watch dog timer interrupt (works only on AVR).
+  See https://sites.google.com/site/astudyofentropy/project-definition/timer-jitter-entropy-sources/entropy-library/arduino-random-seed
+*/
+/**************************************************************************/
 void CreateTrulyRandomSeed() {
   seed1 = 0;
   nrot = 32;  // Must be at least 4, but more increased the uniformity of the produced seeds entropy.
@@ -221,11 +222,9 @@ ISR(WDT_vect) {
   seed1 = seed1 ^ TCNT1L;
 }
 
-// Board definitions
+// Preprocessor code for identifying microcontroller board
 #if defined(TEENSYDUINO)
-
 //  --------------- Teensy -----------------
-
 #if defined(__AVR_ATmega32U4__)
 #define BOARD F("Teensy 2.0")
 #elif defined(__AVR_AT90USB1286__)
@@ -243,9 +242,7 @@ ISR(WDT_vect) {
 #else
 #define BOARD F("Unknown Board")
 #endif
-
 #else  // --------------- Arduino ------------------
-
 #if defined(ARDUINO_AVR_ADK)
 #define BOARD F("Arduino Mega Adk")
 #elif defined(ARDUINO_AVR_BT)  // Bluetooth
@@ -299,5 +296,4 @@ ISR(WDT_vect) {
 #else
 #define BOARD F("Unknown Board")
 #endif
-
 #endif
